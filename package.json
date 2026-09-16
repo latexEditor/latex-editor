@@ -1,0 +1,18 @@
+{
+  "name": "latex-editor",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Monorepo for the LaTeX Editor desktop and future web applications",
+  "workspaces": [
+    "latex-editor-desktop"
+  ],
+  "engines": {
+    "node": "20.19.5"
+  },
+  "scripts": {
+    "start": "npm --workspace latex-editor-desktop start",
+    "test": "npm --workspace latex-editor-desktop test",
+    "check": "npm --workspace latex-editor-desktop run check",
+    "setup:desktop": "npm --workspace latex-editor-desktop run setup"
+  }
+}

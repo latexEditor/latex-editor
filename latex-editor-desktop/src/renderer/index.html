@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:">
+  <title>LaTeX Editor</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand" title="LaTeX Editor">
+      <span class="brand-mark">L</span>
+      <strong>LaTeX Editor</strong>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="project-switcher">
+      <button id="project-menu-button" class="project-button" aria-expanded="false">
+        <span class="project-symbol">Tₑ</span>
+        <span id="project-name">Đang khởi động…</span>
+        <span class="chevron">⌄</span>
+      </button>
+      <div id="project-menu" class="project-menu" hidden>
+        <div class="menu-label">PROJECT GẦN ĐÂY</div>
+        <div id="project-list"></div>
+        <div class="menu-separator"></div>
+        <button id="open-project" class="menu-action"><span>⌁</span>Mở thư mục…</button>
+      </div>
+    </div>
+
+    <button id="new-project" class="toolbar-button primary"><span>＋</span> Project mới</button>
+
+    <div class="spacer"></div>
+
+    <button id="runtime-details" class="runtime-button" title="Xem trạng thái LaTeX runtime">
+      <span id="runtime-dot" class="dot checking"></span>
+      <span id="runtime-label">Kiểm tra LaTeX…</span>
+    </button>
+    <div class="status" title="Trạng thái code-server">
+      <span id="status-dot" class="dot checking"></span>
+      <span id="status-text">Đang kết nối…</span>
+    </div>
+  </header>
+
+  <dialog id="new-dialog">
+    <form method="dialog">
+      <h2>Tạo project mới</h2>
+      <p>Project được tạo từ template bài báo cơ bản.</p>
+      <label for="new-project-name">Tên project</label>
+      <input id="new-project-name" maxlength="100" placeholder="Ví dụ: Báo cáo tốt nghiệp" autocomplete="off">
+      <div id="dialog-error" class="error" aria-live="polite"></div>
+      <div class="dialog-actions">
+        <button value="cancel">Hủy</button>
+        <button id="create-confirm" value="default" class="primary">Tạo project</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="runtime-dialog">
+    <form method="dialog">
+      <h2>LaTeX runtime</h2>
+      <div id="runtime-content"></div>
+      <div class="dialog-actions"><button value="close" class="primary">Đóng</button></div>
+    </form>
+  </dialog>
+  <script src="app.js"></script>
+</body>
+</html>

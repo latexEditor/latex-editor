@@ -1,0 +1,23 @@
+{
+  "name": "latex-editor",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local-first LaTeX desktop editor powered by Electron, code-server and LaTeX Workshop",
+  "main": "src/main/main.js",
+  "engines": {
+    "node": "20.19.5"
+  },
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron .",
+    "test": "node --test test",
+    "check": "node --check src/main/config.js && node --check src/main/CodeServerManager.js && node --check src/main/WorkspaceManager.js && node --check src/main/LatexRuntimeManager.js && node --check src/main/ipc.js && node --check src/main/main.js && node --check src/preload/preload.js && node --check src/renderer/app.js",
+    "setup:code-server": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/setup-code-server-runtime.ps1",
+    "setup:latex-workshop": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/setup-latex-workshop.ps1",
+    "check:latex": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-latex-runtime.ps1",
+    "setup": "npm run setup:code-server && npm run setup:latex-workshop && npm run check:latex"
+  },
+  "devDependencies": {
+    "electron": "43.2.0"
+  }
+}

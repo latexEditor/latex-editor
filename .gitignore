@@ -1,0 +1,12 @@
+node_modules/
+runtime/
+user-data/
+reference-sync-data/
+*.log
+*.aux
+*.fdb_latexmk
+*.fls
+*.out
+*.synctex.gz
+*.pdf
+!resources/**/*.pdf
