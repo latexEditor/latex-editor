@@ -71,6 +71,31 @@ class WorkspaceManager {
     return (settings.recentProjects || []).map((item) => this.describe(item));
   }
 
+  listOpenProjects() {
+    const settings = this.#readSettings();
+    return (settings.openProjects || [])
+      .map((item) => this.describe(item))
+      .filter((item) => item.exists);
+  }
+
+  hasOpenProjectsState() {
+    return Array.isArray(this.#readSettings().openProjects);
+  }
+
+  closeProject(projectPath) {
+    const resolved = path.resolve(projectPath);
+    const settings = this.#readSettings();
+    const samePath = (candidate) => process.platform === 'win32'
+      ? candidate.toLowerCase() === resolved.toLowerCase()
+      : candidate === resolved;
+    settings.openProjects = (settings.openProjects || []).filter((item) => !samePath(item));
+    if (settings.lastProject && samePath(settings.lastProject)) {
+      settings.lastProject = settings.openProjects[0] || null;
+    }
+    this.fs.writeFileSync(this.settingsFile, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
+    return settings.openProjects.length ? this.describe(settings.openProjects[0]) : null;
+  }
+
   remember(projectPath) {
     const resolved = path.resolve(projectPath);
     const settings = this.#readSettings();
@@ -78,6 +103,9 @@ class WorkspaceManager {
       ? candidate.toLowerCase() === resolved.toLowerCase()
       : candidate === resolved;
     settings.recentProjects = [resolved, ...(settings.recentProjects || []).filter((item) => !samePath(item))].slice(0, 12);
+    const openProjects = (settings.openProjects || []).filter((item) => this.fs.existsSync(item));
+    if (!openProjects.some((item) => samePath(item))) openProjects.push(resolved);
+    settings.openProjects = openProjects;
     settings.lastProject = resolved;
     this.fs.writeFileSync(this.settingsFile, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
   }
@@ -104,9 +132,10 @@ class WorkspaceManager {
   #writeLatexSettings(projectPath) {
     const vscodeDir = path.join(projectPath, '.vscode');
     const settingsPath = path.join(vscodeDir, 'settings.json');
-    if (this.fs.existsSync(settingsPath)) return;
     this.fs.mkdirSync(vscodeDir, { recursive: true });
-    const preferredTool = this.runtimeStatus?.tools?.find((tool) => tool.name === 'latexmk' && tool.available)
+    const preferredTool = this.runtimeStatus?.tools?.find((tool) => (
+      tool.name === 'latexmk' && tool.available && tool.usable !== false
+    ))
       ? 'latexmk'
       : 'pdflatex';
     const tools = preferredTool === 'latexmk'
@@ -119,14 +148,43 @@ class WorkspaceManager {
         args: ['-synctex=1', '-interaction=nonstopmode', '-file-line-error', '-output-directory=%OUTDIR%', '%DOC%']
       }];
     const settings = {
+      'window.commandCenter': false,
+      'window.customTitleBarVisibility': 'never',
       'latex-workshop.latex.autoBuild.run': 'onSave',
       'latex-workshop.latex.outDir': '%DIR%/build',
       'latex-workshop.latex.recipes': [{ name: preferredTool, tools: [preferredTool] }],
       'latex-workshop.latex.tools': tools,
       'latex-workshop.view.pdf.viewer': 'tab',
+      'latex-workshop.view.pdf.tab.editorGroup': 'right',
       'latex-workshop.synctex.afterBuild.enabled': true,
       'files.exclude': { '**/*.aux': true, '**/*.fls': true, '**/*.fdb_latexmk': true }
     };
+
+    if (this.fs.existsSync(settingsPath)) {
+      try {
+        const current = JSON.parse(this.fs.readFileSync(settingsPath, 'utf8'));
+        const recipe = current['latex-workshop.latex.recipes'];
+        const currentTools = current['latex-workshop.latex.tools'];
+        const managedRecipe = Array.isArray(recipe) && recipe.length === 1
+          && ['latexmk', 'pdflatex'].includes(recipe[0]?.name)
+          && recipe[0]?.tools?.length === 1
+          && recipe[0].tools[0] === recipe[0].name;
+        const managedTools = Array.isArray(currentTools) && currentTools.length === 1
+          && currentTools[0]?.name === recipe?.[0]?.name
+          && currentTools[0]?.command === recipe?.[0]?.name;
+        if (!managedRecipe || !managedTools || recipe[0].name === preferredTool) return;
+        const migrated = {
+          ...current,
+          'latex-workshop.latex.recipes': settings['latex-workshop.latex.recipes'],
+          'latex-workshop.latex.tools': settings['latex-workshop.latex.tools']
+        };
+        this.fs.writeFileSync(settingsPath, `${JSON.stringify(migrated, null, 2)}\n`, 'utf8');
+        return;
+      } catch (error) {
+        if (!(error instanceof SyntaxError)) throw error;
+        return;
+      }
+    }
     this.fs.writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
   }
 }

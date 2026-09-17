@@ -36,6 +36,20 @@ if ($LASTEXITCODE -ne 0) { throw "code-server installation failed with exit code
 
 $entry = Join-Path $prefix 'node_modules\code-server\out\node\entry.js'
 if (-not (Test-Path $entry)) { throw "Missing code-server entry point: $entry" }
+
+# code-server 4.93.1 proxies extension-local HTTP servers through 0.0.0.0.
+# Connecting to that wildcard address hangs on Windows, leaving embedded views
+# such as LaTeX Workshop's PDF.js viewer blank. Use the loopback address.
+$pathProxy = Join-Path $prefix 'node_modules\code-server\out\node\routes\pathProxy.js'
+$pathProxyContents = Get-Content -Raw -LiteralPath $pathProxy
+$patchedPathProxyContents = $pathProxyContents.Replace('http://0.0.0.0:${req.params.port}', 'http://127.0.0.1:${req.params.port}')
+$patchedPathProxyContents = $patchedPathProxyContents.Replace('req.path.split(path.sep).slice(0, 3).join(path.sep)', 'req.path.split("/").slice(0, 3).join("/")')
+$hasLoopbackPatch = $patchedPathProxyContents -match 'http://127\.0\.0\.1:\$\{req\.params\.port\}'
+$hasUrlSeparatorPatch = $patchedPathProxyContents -notmatch 'req\.path\.split\(path\.sep\)'
+if (-not $hasLoopbackPatch -or -not $hasUrlSeparatorPatch) {
+  throw "Could not patch the code-server path proxy: $pathProxy"
+}
+$patchedPathProxyContents | Set-Content -Encoding UTF8 -NoNewline -LiteralPath $pathProxy
 $wrapperContents = @"
 @echo off
 setlocal

@@ -14,15 +14,17 @@ class LatexRuntimeManager {
     const tools = ['latexmk', 'pdflatex', 'xelatex'].map((name) => this.#find(name));
     const available = tools.filter((tool) => tool.available);
     const distribution = this.#distribution(available);
+    const canBuild = tools.some((tool) => ['latexmk', 'pdflatex'].includes(tool.name) && tool.usable);
     return {
       available: available.length > 0,
-      canBuild: tools.some((tool) => tool.name === 'latexmk' && tool.available)
-        || tools.some((tool) => tool.name === 'pdflatex' && tool.available),
+      canBuild,
       distribution,
       tools,
-      recommendation: available.length > 0
+      recommendation: canBuild
         ? null
-        : 'Hãy cài MiKTeX hoặc TeX Live, bật tùy chọn thêm công cụ LaTeX vào PATH, rồi khởi động lại ứng dụng.'
+        : available.length > 0
+          ? 'Đã tìm thấy LaTeX nhưng chưa có trình biên dịch chạy được. Hãy xem chi tiết từng công cụ.'
+          : 'Hãy cài MiKTeX hoặc TeX Live, bật tùy chọn thêm công cụ LaTeX vào PATH, rồi khởi động lại ứng dụng.'
     };
   }
 
@@ -31,7 +33,7 @@ class LatexRuntimeManager {
     const lookup = this.platform === 'win32' ? 'where.exe' : 'which';
     const result = this.spawnSync(lookup, [executable], { encoding: 'utf8', windowsHide: true });
     const foundPath = result.status === 0 ? String(result.stdout).split(/\r?\n/).find(Boolean)?.trim() : null;
-    if (foundPath) return { name, available: true, path: foundPath };
+    if (foundPath) return this.#inspect(name, foundPath);
 
     if (this.platform === 'win32') {
       const roots = [
@@ -41,9 +43,32 @@ class LatexRuntimeManager {
         path.join(this.env.ProgramFiles || 'C:\\Program Files', 'texlive', '2025', 'bin', 'windows')
       ];
       const candidate = roots.map((root) => path.join(root, executable)).find((file) => this.fs.existsSync(file));
-      if (candidate) return { name, available: true, path: candidate };
+      if (candidate) return this.#inspect(name, candidate);
     }
-    return { name, available: false, path: null };
+    return { name, available: false, usable: false, path: null, reason: 'Không tìm thấy' };
+  }
+
+  #inspect(name, executablePath) {
+    if (name !== 'latexmk') {
+      return { name, available: true, usable: true, path: executablePath, reason: null };
+    }
+
+    const probe = this.spawnSync(executablePath, ['--version'], {
+      encoding: 'utf8',
+      windowsHide: true,
+      env: {
+        ...this.env,
+        PATH: [path.dirname(executablePath), this.env.PATH].filter(Boolean).join(path.delimiter)
+      }
+    });
+    if (probe.status === 0) {
+      return { name, available: true, usable: true, path: executablePath, reason: null };
+    }
+    const output = `${probe.stderr || ''}\n${probe.stdout || ''}`;
+    const reason = /perl/i.test(output)
+      ? 'Thiếu Perl; app sẽ dùng pdflatex'
+      : 'Không thể chạy; app sẽ dùng pdflatex';
+    return { name, available: true, usable: false, path: executablePath, reason };
   }
 
   #distribution(tools) {

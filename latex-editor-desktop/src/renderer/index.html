@@ -16,20 +16,9 @@
 
     <div class="divider"></div>
 
-    <div class="project-switcher">
-      <button id="project-menu-button" class="project-button" aria-expanded="false">
-        <span class="project-symbol">Tₑ</span>
-        <span id="project-name">Đang khởi động…</span>
-        <span class="chevron">⌄</span>
-      </button>
-      <div id="project-menu" class="project-menu" hidden>
-        <div class="menu-label">PROJECT GẦN ĐÂY</div>
-        <div id="project-list"></div>
-        <div class="menu-separator"></div>
-        <button id="open-project" class="menu-action"><span>⌁</span>Mở thư mục…</button>
-      </div>
-    </div>
+    <div id="project-tabs" class="project-tabs" aria-label="Các project đang mở"></div>
 
+    <button id="open-project" class="toolbar-button"><span>⌁</span> Mở thư mục</button>
     <button id="new-project" class="toolbar-button primary"><span>＋</span> Project mới</button>
 
     <div class="spacer"></div>
@@ -43,6 +32,14 @@
       <span id="status-text">Đang kết nối…</span>
     </div>
   </header>
+
+  <main id="empty-workspace" class="empty-workspace" hidden>
+    <div class="empty-workspace-card">
+      <span class="empty-workspace-mark">L</span>
+      <h1>Chưa mở project</h1>
+      <p>Mở một thư mục LaTeX có sẵn hoặc tạo project mới để bắt đầu.</p>
+    </div>
+  </main>
 
   <dialog id="new-dialog">
     <form method="dialog">

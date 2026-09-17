@@ -1,5 +1,8 @@
 const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const { PassThrough } = require('node:stream');
 const test = require('node:test');
 const { CodeServerManager } = require('../src/main/CodeServerManager');
@@ -15,20 +18,22 @@ function fakeChild() {
   return child;
 }
 
-function config(overrides = {}) {
+function config(t, overrides = {}) {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'latex-editor-code-server-'));
+  t.after(() => fs.rmSync(dataDir, { recursive: true, force: true }));
   return {
     preferredPort: 18765, readyTimeoutMs: 50, host: '127.0.0.1',
-    executable: process.execPath, auth: 'none', appDataDir: process.cwd(),
-    extensionsDir: process.cwd(), ...overrides
+    executable: process.execPath, auth: 'none', appDataDir: dataDir,
+    extensionsDir: path.join(dataDir, 'extensions'), ...overrides
   };
 }
 
 const quiet = { info() {}, warn() {}, error() {} };
 
-test('uses root readiness endpoint when healthz is unavailable', async () => {
+test('uses root readiness endpoint when healthz is unavailable', async (t) => {
   const child = fakeChild();
   const requested = [];
-  const manager = new CodeServerManager(config(), quiet, {
+  const manager = new CodeServerManager(config(t), quiet, {
     spawn: () => child,
     fetch: async (url) => {
       requested.push(url);
@@ -43,9 +48,9 @@ test('uses root readiness endpoint when healthz is unavailable', async () => {
   child.emit('exit', 0, null);
 });
 
-test('reports recent process output when startup fails', async () => {
+test('reports recent process output when startup fails', async (t) => {
   const child = fakeChild();
-  const manager = new CodeServerManager(config(), quiet, {
+  const manager = new CodeServerManager(config(t), quiet, {
     spawn: () => child,
     fetch: async () => { throw new Error('not ready'); }
   });

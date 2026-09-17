@@ -37,6 +37,7 @@ class CodeServerManager {
     this.recentOutput = [];
     fs.mkdirSync(this.config.appDataDir, { recursive: true });
     fs.mkdirSync(this.config.extensionsDir, { recursive: true });
+    this.#writeGlobalSettings();
 
     const args = [
       '--bind-addr', `${this.config.host}:${this.port}`,
@@ -160,6 +161,45 @@ class CodeServerManager {
       server.once('listening', () => server.close(() => resolve(true)));
       server.listen({ host: this.config.host, port, exclusive: true });
     });
+  }
+
+  #writeGlobalSettings() {
+    try {
+      const userDir = path.join(this.config.appDataDir, 'User');
+      const machineDir = path.join(this.config.appDataDir, 'Machine');
+      fs.mkdirSync(userDir, { recursive: true });
+      fs.mkdirSync(machineDir, { recursive: true });
+
+      const settings = {
+        'window.commandCenter': false,
+        'window.customTitleBarVisibility': 'never',
+        'workbench.startupEditor': 'welcomePage'
+      };
+
+      const settingsJson = `${JSON.stringify(settings, null, 2)}\n`;
+
+      const userSettingsPath = path.join(userDir, 'settings.json');
+      if (!fs.existsSync(userSettingsPath)) {
+        fs.writeFileSync(userSettingsPath, settingsJson, 'utf8');
+      } else {
+        const current = JSON.parse(fs.readFileSync(userSettingsPath, 'utf8'));
+        if (current['window.commandCenter'] !== false) {
+           fs.writeFileSync(userSettingsPath, JSON.stringify({ ...current, ...settings }, null, 2), 'utf8');
+        }
+      }
+
+      const machineSettingsPath = path.join(machineDir, 'settings.json');
+      if (!fs.existsSync(machineSettingsPath)) {
+        fs.writeFileSync(machineSettingsPath, settingsJson, 'utf8');
+      } else {
+        const current = JSON.parse(fs.readFileSync(machineSettingsPath, 'utf8'));
+        if (current['window.commandCenter'] !== false) {
+           fs.writeFileSync(machineSettingsPath, JSON.stringify({ ...current, ...settings }, null, 2), 'utf8');
+        }
+      }
+    } catch (error) {
+      this.log.error('Failed to write global code-server settings:', error);
+    }
   }
 }
 

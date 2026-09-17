@@ -35,6 +35,47 @@ test('writes a pdflatex fallback recipe when latexmk is unavailable', (t) => {
   assert.equal(settings['latex-workshop.latex.recipes'][0].name, 'pdflatex');
 });
 
+test('migrates an app-managed latexmk recipe when latexmk is unusable', (t) => {
+  const manager = fixture(t);
+  manager.runtimeStatus = { tools: [{ name: 'latexmk', available: true, usable: true }] };
+  const project = manager.createProject('Missing Perl');
+  manager.runtimeStatus = { tools: [{ name: 'latexmk', available: true, usable: false }] };
+  manager.openProject(project.path);
+  const settings = JSON.parse(fs.readFileSync(path.join(project.path, '.vscode', 'settings.json'), 'utf8'));
+  assert.equal(settings['latex-workshop.latex.recipes'][0].name, 'pdflatex');
+  assert.equal(settings['latex-workshop.latex.tools'][0].command, 'pdflatex');
+});
+
+test('keeps multiple projects open in creation order without duplicating switched tabs', (t) => {
+  const manager = fixture(t);
+  const duong = manager.createProject('duong');
+  const trinh = manager.createProject('trinh');
+  assert.deepEqual(manager.listOpenProjects().map((project) => project.name), ['duong', 'trinh']);
+
+  manager.openProject(duong.path);
+  assert.deepEqual(manager.listOpenProjects().map((project) => project.name), ['duong', 'trinh']);
+});
+
+test('closes a project tab without deleting its project directory', (t) => {
+  const manager = fixture(t);
+  const duong = manager.createProject('duong');
+  manager.createProject('trinh');
+  const nextProject = manager.closeProject(duong.path);
+
+  assert.equal(nextProject.name, 'trinh');
+  assert.deepEqual(manager.listOpenProjects().map((project) => project.name), ['trinh']);
+  assert.equal(fs.existsSync(duong.path), true);
+});
+
+test('remembers an intentionally empty tab list after closing the last project', (t) => {
+  const manager = fixture(t);
+  const project = manager.createProject('binh');
+  manager.closeProject(project.path);
+
+  assert.equal(manager.hasOpenProjectsState(), true);
+  assert.deepEqual(manager.listOpenProjects(), []);
+});
+
 test('sanitizes path separators so project stays below managed root', (t) => {
   const manager = fixture(t);
   const project = manager.createProject('chapter/../paper');

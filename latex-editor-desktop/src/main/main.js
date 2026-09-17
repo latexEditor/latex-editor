@@ -6,7 +6,7 @@ const { WorkspaceManager } = require('./WorkspaceManager');
 const { LatexRuntimeManager } = require('./LatexRuntimeManager');
 const { registerIpc } = require('./ipc');
 
-const TOPBAR_HEIGHT = 40;
+const TOPBAR_HEIGHT = 48;
 let mainWindow;
 let editorView;
 let serverManager;
@@ -15,11 +15,13 @@ let runtimeManager;
 let activeProject;
 let serverUrl;
 let quitting = false;
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
 
 function state() {
   return {
     phase: serverUrl ? 'ready' : 'starting',
     project: activeProject || null,
+    openProjects: workspaceManager?.listOpenProjects() || [],
     serverUrl: serverUrl?.toString() || null
   };
 }
@@ -30,8 +32,22 @@ function notifyState() {
 
 function layoutEditor() {
   if (!mainWindow || !editorView) return;
+  if (!activeProject) {
+    hideEditor();
+    return;
+  }
   const [width, height] = mainWindow.getContentSize();
   editorView.setBounds({ x: 0, y: TOPBAR_HEIGHT, width, height: Math.max(0, height - TOPBAR_HEIGHT) });
+}
+
+function hideEditor() {
+  if (!mainWindow || !editorView) return;
+  editorView.setBounds({ x: 0, y: 0, width: 0, height: 0 });
+}
+
+function showEditor() {
+  if (activeProject) layoutEditor();
+  else hideEditor();
 }
 
 function allowedEditorUrl(target) {
@@ -44,11 +60,27 @@ function allowedEditorUrl(target) {
 }
 
 async function loadProject(projectPath) {
+  if (!projectPath) {
+    activeProject = null;
+    hideEditor();
+    notifyState();
+    return null;
+  }
   activeProject = workspaceManager.openProject(projectPath);
   const target = workspaceManager.codeServerUrl(config.host, serverManager.port, activeProject.path);
   await editorView.webContents.loadURL(target.toString());
+  showEditor();
   notifyState();
   return activeProject;
+}
+
+async function closeProjectTab(projectPath) {
+  const closingActiveProject = activeProject?.path
+    && path.resolve(activeProject.path).toLowerCase() === path.resolve(projectPath).toLowerCase();
+  const nextProject = workspaceManager.closeProject(projectPath);
+  if (closingActiveProject) await loadProject(nextProject?.path || null);
+  else notifyState();
+  return nextProject;
 }
 
 async function createWindow() {
@@ -58,8 +90,14 @@ async function createWindow() {
     minWidth: 960,
     minHeight: 640,
     show: false,
-    backgroundColor: '#0b1020',
+    backgroundColor: '#ffffff',
     title: 'LaTeX Editor',
+    titleBarStyle: 'hidden',
+    titleBarOverlay: {
+      color: '#f8fafc',
+      symbolColor: '#334155',
+      height: 48
+    },
     webPreferences: {
       preload: path.join(__dirname, '../preload/preload.js'),
       nodeIntegration: false,
@@ -97,13 +135,21 @@ async function startup() {
   workspaceManager = new WorkspaceManager(config, { runtimeStatus });
   serverManager = new CodeServerManager(config);
   workspaceManager.initialize();
-  activeProject = workspaceManager.ensureWelcomeProject();
+  const restoredProjects = workspaceManager.listOpenProjects();
+  const mostRecentOpenProject = workspaceManager.listRecent().find((recentProject) => (
+    restoredProjects.some((openProject) => openProject.path.toLowerCase() === recentProject.path.toLowerCase())
+  ));
+  activeProject = mostRecentOpenProject || restoredProjects[0]
+    || (workspaceManager.hasOpenProjectsState() ? null : workspaceManager.ensureWelcomeProject());
   registerIpc({
     ipcMain,
     dialog,
     workspaceManager,
     runtimeManager,
     openProject: loadProject,
+    closeProject: closeProjectTab,
+    hideEditor,
+    showEditor,
     getState: state
   });
   session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
@@ -111,7 +157,7 @@ async function startup() {
   await serverManager.start();
   await serverManager.waitUntilReady();
   serverUrl = new URL(`http://${config.host}:${serverManager.port}`);
-  await loadProject(activeProject.path);
+  await loadProject(activeProject?.path || null);
 }
 
 async function shutdown() {
@@ -120,7 +166,17 @@ async function shutdown() {
   await Promise.allSettled([serverManager?.stop()]);
 }
 
-app.whenReady().then(startup).catch(async (error) => {
+if (!hasSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+  });
+
+  app.whenReady().then(startup).catch(async (error) => {
   console.error('Startup failed:', error);
   await shutdown();
   await dialog.showMessageBox({
@@ -130,7 +186,12 @@ app.whenReady().then(startup).catch(async (error) => {
     detail: 'Kiểm tra README và chạy npm run setup trước khi thử lại.'
   });
   app.quit();
-});
+  });
+
+  const quitFromSignal = () => shutdown().finally(() => app.quit());
+  process.once('SIGINT', quitFromSignal);
+  process.once('SIGTERM', quitFromSignal);
+}
 
 app.on('before-quit', (event) => {
   if (quitting) return;

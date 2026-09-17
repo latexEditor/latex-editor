@@ -1,7 +1,4 @@
 const api = window.latexEditor;
-const projectMenu = document.querySelector('#project-menu');
-const projectMenuButton = document.querySelector('#project-menu-button');
-const projectList = document.querySelector('#project-list');
 const newDialog = document.querySelector('#new-dialog');
 const runtimeDialog = document.querySelector('#runtime-dialog');
 const nameInput = document.querySelector('#new-project-name');
@@ -9,55 +6,55 @@ const errorBox = document.querySelector('#dialog-error');
 let currentState = { phase: 'starting', project: null };
 let runtimeStatus;
 
-function shortPath(value) {
-  return value.length > 38 ? `…${value.slice(-37)}` : value;
+function samePath(left, right) {
+  return String(left || '').toLowerCase() === String(right || '').toLowerCase();
 }
 
-function closeProjectMenu() {
-  projectMenu.hidden = true;
-  projectMenuButton.setAttribute('aria-expanded', 'false');
+function renderProjectTabs(projects, activeProject) {
+  const tabs = document.querySelector('#project-tabs');
+  tabs.replaceChildren();
+  for (const project of projects) {
+    const tab = document.createElement('div');
+    tab.className = `project-tab${samePath(project.path, activeProject?.path) ? ' active' : ''}`;
+    tab.title = project.path;
+
+    const openButton = document.createElement('button');
+    openButton.className = 'project-tab-open';
+    openButton.type = 'button';
+    const symbol = document.createElement('span');
+    symbol.className = 'project-symbol';
+    symbol.textContent = 'Tₑ';
+    const name = document.createElement('span');
+    name.className = 'project-tab-name';
+    name.textContent = project.name;
+    openButton.append(symbol, name);
+    openButton.addEventListener('click', async () => {
+      if (samePath(project.path, currentState.project?.path)) return;
+      try { await api.openProject(project.path); } catch (error) { window.alert(error.message); }
+    });
+
+    const closeButton = document.createElement('button');
+    closeButton.className = 'project-tab-close';
+    closeButton.type = 'button';
+    closeButton.title = `Đóng ${project.name}`;
+    closeButton.setAttribute('aria-label', `Đóng project ${project.name}`);
+    closeButton.textContent = '×';
+    closeButton.addEventListener('click', async () => {
+      try { await api.closeProject(project.path); } catch (error) { window.alert(error.message); }
+    });
+
+    tab.append(openButton, closeButton);
+    tabs.append(tab);
+  }
 }
 
 function renderState(next) {
   currentState = next;
   const ready = next.phase === 'ready';
-  document.querySelector('#project-name').textContent = next.project?.name || 'Chọn project';
+  renderProjectTabs(next.openProjects || [], next.project);
+  document.querySelector('#empty-workspace').hidden = Boolean(next.project);
   document.querySelector('#status-dot').className = `dot ${ready ? 'ok' : 'checking'}`;
   document.querySelector('#status-text').textContent = ready ? 'Editor sẵn sàng' : 'Đang kết nối…';
-  renderProjects();
-}
-
-async function renderProjects() {
-  const projects = (await api.listProjects()).filter((project) => project.exists);
-  projectList.replaceChildren();
-  if (!projects.length) {
-    const empty = document.createElement('div');
-    empty.className = 'empty';
-    empty.textContent = 'Chưa có project gần đây.';
-    projectList.append(empty);
-    return;
-  }
-  for (const project of projects) {
-    const button = document.createElement('button');
-    button.className = `project-item${currentState.project?.path === project.path ? ' active' : ''}`;
-    const symbol = document.createElement('span');
-    symbol.className = 'project-symbol';
-    symbol.textContent = 'Tₑ';
-    const meta = document.createElement('span');
-    meta.className = 'project-meta';
-    const title = document.createElement('strong');
-    title.textContent = project.name;
-    const location = document.createElement('small');
-    location.textContent = shortPath(project.path);
-    meta.append(title, location);
-    button.append(symbol, meta);
-    button.title = project.path;
-    button.addEventListener('click', async () => {
-      closeProjectMenu();
-      try { await api.openProject(project.path); } catch (error) { window.alert(error.message); }
-    });
-    projectList.append(button);
-  }
 }
 
 async function inspectRuntime() {
@@ -68,21 +65,28 @@ async function inspectRuntime() {
     : 'Thiếu LaTeX runtime';
 }
 
-projectMenuButton.addEventListener('click', async () => {
-  const opening = projectMenu.hidden;
-  projectMenu.hidden = !opening;
-  projectMenuButton.setAttribute('aria-expanded', String(opening));
-  if (opening) await renderProjects();
-});
-document.addEventListener('click', (event) => {
-  if (!event.target.closest('.project-switcher')) closeProjectMenu();
-});
-document.querySelector('#new-project').addEventListener('click', () => {
-  closeProjectMenu();
+document.querySelector('#new-project').addEventListener('click', async () => {
   errorBox.textContent = '';
   nameInput.value = '';
+  await api.hideEditor();
   newDialog.showModal();
   setTimeout(() => nameInput.focus(), 0);
+});
+newDialog.addEventListener('close', async () => {
+  await api.showEditor();
+});
+document.querySelector('#open-project').addEventListener('click', async (event) => {
+  const button = event.currentTarget;
+  if (button.disabled) return;
+  button.disabled = true;
+  try {
+    await api.chooseProject();
+  } catch (error) {
+    window.alert(error.message);
+  } finally {
+    button.disabled = false;
+    button.focus();
+  }
 });
 document.querySelector('#create-confirm').addEventListener('click', async (event) => {
   event.preventDefault();
@@ -93,11 +97,7 @@ document.querySelector('#create-confirm').addEventListener('click', async (event
     newDialog.close();
   } catch (error) { errorBox.textContent = error.message; }
 });
-document.querySelector('#open-project').addEventListener('click', async () => {
-  closeProjectMenu();
-  try { await api.chooseProject(); } catch (error) { window.alert(error.message); }
-});
-document.querySelector('#runtime-details').addEventListener('click', () => {
+document.querySelector('#runtime-details').addEventListener('click', async () => {
   if (!runtimeStatus) return;
   const content = document.querySelector('#runtime-content');
   content.replaceChildren();
@@ -107,7 +107,9 @@ document.querySelector('#runtime-details').addEventListener('click', () => {
     const name = document.createElement('strong');
     name.textContent = tool.name;
     const value = document.createElement('span');
-    value.textContent = tool.available ? tool.path : 'Không tìm thấy';
+    value.textContent = tool.available
+      ? `${tool.path}${tool.usable === false ? ` — ${tool.reason}` : ''}`
+      : 'Không tìm thấy';
     value.title = value.textContent;
     row.append(name, value);
     content.append(row);
@@ -118,7 +120,11 @@ document.querySelector('#runtime-details').addEventListener('click', () => {
     help.textContent = runtimeStatus.recommendation;
     content.append(help);
   }
+  await api.hideEditor();
   runtimeDialog.showModal();
+});
+runtimeDialog.addEventListener('close', async () => {
+  await api.showEditor();
 });
 
 api.onStateChanged(renderState);
