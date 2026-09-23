@@ -1,19 +1,26 @@
-const { BrowserWindow } = require('electron');
+const { BrowserWindow, shell } = require('electron');
 
 function registerIpc({ ipcMain, dialog, workspaceManager, runtimeManager, openProject, closeProject, hideEditor, showEditor, getState }) {
   let choosingProject = false;
   const channels = [
     'latex:get-state', 'latex:list-projects', 'latex:create-project',
     'latex:choose-project', 'latex:open-project', 'latex:get-runtime-status',
-    'latex:close-project', 'latex:hide-editor', 'latex:show-editor'
+    'latex:close-project', 'latex:hide-editor', 'latex:show-editor',
+    'latex:list-templates', 'latex:forget-project', 'latex:reveal-project'
   ];
   for (const channel of channels) ipcMain.removeHandler(channel);
 
   ipcMain.handle('latex:get-state', () => getState());
   ipcMain.handle('latex:list-projects', () => workspaceManager.listRecent());
+  ipcMain.handle('latex:list-templates', () => workspaceManager.listTemplates());
+  ipcMain.handle('latex:forget-project', (_event, projectPath) => workspaceManager.forgetProject(projectPath));
+  ipcMain.handle('latex:reveal-project', async (_event, projectPath) => {
+    const error = await shell.openPath(workspaceManager.getProjectLocation(projectPath));
+    if (error) throw new Error(`Không mở được thư mục: ${error}`);
+  });
   ipcMain.handle('latex:get-runtime-status', () => runtimeManager.getStatus());
-  ipcMain.handle('latex:create-project', async (_event, name) => {
-    const project = workspaceManager.createProject(name);
+  ipcMain.handle('latex:create-project', async (_event, name, templateId) => {
+    const project = workspaceManager.createProject(name, templateId);
     await openProject(project.path);
     return project;
   });

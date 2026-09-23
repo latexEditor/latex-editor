@@ -1,10 +1,122 @@
 const api = window.latexEditor;
 const newDialog = document.querySelector('#new-dialog');
 const runtimeDialog = document.querySelector('#runtime-dialog');
+const recentDialog = document.querySelector('#recent-dialog');
 const nameInput = document.querySelector('#new-project-name');
 const errorBox = document.querySelector('#dialog-error');
 let currentState = { phase: 'starting', project: null };
 let runtimeStatus;
+let recentProjects = [];
+let creatingProject = false;
+let recentRequest = 0;
+
+async function refreshRecentProjects() {
+  const request = ++recentRequest;
+  const projects = await api.listProjects();
+  if (request !== recentRequest) return;
+  recentProjects = projects;
+  renderRecentProjects();
+}
+
+function renderRecentProjects() {
+  const query = document.querySelector('#project-search').value.trim().toLocaleLowerCase('vi');
+  const matches = recentProjects.filter((project) => (
+    `${project.name} ${project.path}`.toLocaleLowerCase('vi').includes(query)
+  ));
+  renderProjectList(document.querySelector('#recent-project-list'), matches, '#recent-error');
+  renderProjectList(document.querySelector('#welcome-project-list'), recentProjects.slice(0, 5), '#welcome-error');
+}
+
+function renderProjectList(container, projects, errorSelector) {
+  container.replaceChildren();
+  if (!projects.length) {
+    const empty = document.createElement('p');
+    empty.className = 'list-empty';
+    empty.textContent = recentProjects.length ? 'Không tìm thấy project phù hợp.' : 'Chưa có project trong lịch sử.';
+    container.append(empty);
+    return;
+  }
+  for (const project of projects) {
+    const row = document.createElement('div');
+    row.className = `recent-project${project.exists ? '' : ' missing'}`;
+    const open = document.createElement('button');
+    open.type = 'button';
+    open.className = 'recent-project-open';
+    open.disabled = !project.exists || currentState.phase !== 'ready';
+    open.title = project.path;
+    const name = document.createElement('strong');
+    name.textContent = project.name;
+    const location = document.createElement('span');
+    location.textContent = project.path;
+    const status = document.createElement('small');
+    status.textContent = !project.exists ? 'Không tìm thấy thư mục' : (
+      samePath(project.path, currentState.project?.path) ? 'Đang mở' : 'Mở project'
+    );
+    open.append(name, location, status);
+    open.addEventListener('click', async () => {
+      open.disabled = true;
+      document.querySelector(errorSelector).textContent = '';
+      try {
+        await api.openProject(project.path);
+        if (recentDialog.open) recentDialog.close();
+      } catch (error) {
+        document.querySelector(errorSelector).textContent = error.message;
+      } finally {
+        open.disabled = !project.exists || currentState.phase !== 'ready';
+        await refreshRecentProjects().catch((error) => { document.querySelector(errorSelector).textContent = error.message; });
+      }
+    });
+    const actions = document.createElement('div');
+    actions.className = 'recent-project-actions';
+    for (const action of [
+      { label: 'Vị trí', title: `Mở thư mục ${project.name}`, disabled: !project.exists, run: () => api.revealProject(project.path) },
+      { label: 'Bỏ', title: `Bỏ ${project.name} khỏi lịch sử (giữ nguyên file)`, run: async () => {
+        await api.forgetProject(project.path);
+        await refreshRecentProjects();
+      } }
+    ]) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = action.label;
+      button.title = action.title;
+      button.setAttribute('aria-label', action.title);
+      button.disabled = Boolean(action.disabled);
+      button.addEventListener('click', async () => {
+        button.disabled = true;
+        document.querySelector(errorSelector).textContent = '';
+        try { await action.run(); }
+        catch (error) { document.querySelector(errorSelector).textContent = error.message; }
+        finally { button.disabled = Boolean(action.disabled); }
+      });
+      actions.append(button);
+    }
+    row.append(open, actions);
+    container.append(row);
+  }
+}
+
+async function loadTemplates() {
+  const templates = await api.listTemplates();
+  const container = document.querySelector('#template-options');
+  container.replaceChildren();
+  for (const [index, template] of templates.entries()) {
+    const label = document.createElement('label');
+    label.className = 'template-option';
+    const radio = document.createElement('input');
+    radio.type = 'radio';
+    radio.name = 'project-template';
+    radio.value = template.id;
+    radio.checked = index === 0;
+    const content = document.createElement('span');
+    const name = document.createElement('strong');
+    name.textContent = template.name;
+    const description = document.createElement('small');
+    description.textContent = template.description;
+    content.append(name, description);
+    label.append(radio, content);
+    container.append(label);
+  }
+}
 
 function samePath(left, right) {
   return String(left || '').toLowerCase() === String(right || '').toLowerCase();
@@ -55,6 +167,13 @@ function renderState(next) {
   document.querySelector('#empty-workspace').hidden = Boolean(next.project);
   document.querySelector('#status-dot').className = `dot ${ready ? 'ok' : 'checking'}`;
   document.querySelector('#status-text').textContent = ready ? 'Editor sẵn sàng' : 'Đang kết nối…';
+  for (const id of ['new-project-location', 'recent-project-location']) {
+    document.getElementById(id).textContent = next.projectsDir || '';
+  }
+  for (const id of ['new-project', 'open-project', 'recent-projects', 'welcome-new', 'welcome-open']) {
+    document.getElementById(id).disabled = !ready;
+  }
+  refreshRecentProjects().catch((error) => { document.querySelector('#welcome-error').textContent = error.message; });
 }
 
 async function inspectRuntime() {
@@ -68,10 +187,15 @@ async function inspectRuntime() {
 document.querySelector('#new-project').addEventListener('click', async () => {
   errorBox.textContent = '';
   nameInput.value = '';
-  await api.hideEditor();
-  newDialog.showModal();
-  setTimeout(() => nameInput.focus(), 0);
+  try {
+    await api.hideEditor();
+    newDialog.showModal();
+    await loadTemplates();
+    if (newDialog.open) nameInput.focus();
+  } catch (error) { errorBox.textContent = error.message; }
 });
+document.querySelector('#create-cancel').addEventListener('click', () => newDialog.close());
+newDialog.addEventListener('cancel', (event) => { if (creatingProject) event.preventDefault(); });
 newDialog.addEventListener('close', async () => {
   await api.showEditor();
 });
@@ -88,15 +212,50 @@ document.querySelector('#open-project').addEventListener('click', async (event) 
     button.focus();
   }
 });
-document.querySelector('#create-confirm').addEventListener('click', async (event) => {
+document.querySelector('#new-project-form').addEventListener('submit', async (event) => {
   event.preventDefault();
+  if (creatingProject) return;
+  const button = document.querySelector('#create-confirm');
+  const cancel = document.querySelector('#create-cancel');
   try {
     const name = nameInput.value.trim();
     if (!name) throw new Error('Hãy nhập tên project.');
-    await api.createProject(name);
+    const templateId = document.querySelector('input[name="project-template"]:checked')?.value;
+    if (!templateId) throw new Error('Hãy chọn mẫu tài liệu.');
+    creatingProject = true;
+    button.disabled = true;
+    cancel.disabled = true;
+    button.textContent = 'Đang tạo…';
+    await api.createProject(name, templateId);
     newDialog.close();
   } catch (error) { errorBox.textContent = error.message; }
+  finally {
+    creatingProject = false;
+    button.disabled = false;
+    cancel.disabled = false;
+    button.textContent = 'Tạo project';
+  }
 });
+
+document.querySelector('#recent-projects').addEventListener('click', async () => {
+  document.querySelector('#recent-error').textContent = '';
+  document.querySelector('#project-search').value = '';
+  try {
+    await api.hideEditor();
+    recentDialog.showModal();
+    await refreshRecentProjects();
+    if (recentDialog.open) document.querySelector('#project-search').focus();
+  } catch (error) { document.querySelector('#recent-error').textContent = error.message; }
+});
+recentDialog.addEventListener('close', () => api.showEditor());
+document.querySelector('#recent-close').addEventListener('click', () => recentDialog.close());
+document.querySelector('#project-search').addEventListener('input', renderRecentProjects);
+document.querySelector('#reveal-projects-root').addEventListener('click', async () => {
+  try { await api.revealProject(); }
+  catch (error) { document.querySelector('#recent-error').textContent = error.message; }
+});
+document.querySelector('#welcome-open').addEventListener('click', () => document.querySelector('#open-project').click());
+document.querySelector('#welcome-new').addEventListener('click', () => document.querySelector('#new-project').click());
 document.querySelector('#runtime-details').addEventListener('click', async () => {
   if (!runtimeStatus) return;
   const content = document.querySelector('#runtime-content');
@@ -128,4 +287,5 @@ runtimeDialog.addEventListener('close', async () => {
 });
 
 api.onStateChanged(renderState);
-Promise.all([api.getState(), inspectRuntime()]).then(([initialState]) => renderState(initialState));
+Promise.all([api.getState(), inspectRuntime()]).then(([initialState]) => renderState(initialState))
+  .catch((error) => { document.querySelector('#status-text').textContent = error.message; });

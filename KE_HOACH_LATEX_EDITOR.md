@@ -475,3 +475,31 @@ Thiết kế web riêng
 ```
 
 Thứ tự này giữ phần cốt lõi của sản phẩm có thể demo sớm, giảm số lớp phải debug cùng lúc và tránh để auth/cloud che khuất vấn đề chính: trải nghiệm soạn, biên dịch và xem LaTeX.
+
+## 15. Yêu cầu tiếp theo đã xác nhận — 23/09/2026
+
+### Lịch sử phiên bản riêng cho từng project
+
+- Mỗi project có mục **Lịch sử**, hoạt động theo trải nghiệm phiên bản như Git.
+- Có thao tác lưu phiên bản với ghi chú; lịch sử hiển thị thời điểm lưu, người lưu và nội dung thay đổi.
+- Người dùng xem lại phiên bản, so sánh thay đổi và khôi phục phiên bản cũ ngay trong app.
+- Lịch sử gắn với project, được giữ khi đóng/mở lại project và đồng bộ cùng project lên cloud.
+
+### Tài khoản và đồng bộ R2
+
+- Có luồng **đăng nhập**, **đăng xuất** và **đăng nhập bằng Google**.
+- Phương thức đăng nhập ngoài Google sẽ được chốt khi thiết kế auth; chưa mặc định chọn nhà cung cấp hay cơ chế mật khẩu.
+- Sau khi đăng nhập, đồng bộ project cùng lịch sử phiên bản lên R2 theo tài khoản.
+- Đăng nhập trên máy khác phải tải lại được cả dữ liệu project và lịch sử của project đó.
+- Thiết kế tài khoản/project/version để phiên bản web sau này có thể dùng chung backend.
+
+### Hướng triển khai và tiêu chí bảo toàn dữ liệu
+
+- M3: triển khai Git local cùng giao diện Lịch sử, lưu phiên bản, so sánh và khôi phục.
+- Khi khôi phục, giữ lại công việc hiện tại bằng bản lưu bảo vệ; ghi nhận kết quả khôi phục thành phiên bản mới để lịch sử vẫn liên tục.
+- M4: triển khai phiên đăng nhập/đăng xuất, Google OAuth và backend đồng bộ dữ liệu phiên bản vào R2.
+- Đăng xuất dừng đồng bộ và kết thúc phiên; file local vẫn còn. Khi đổi tài khoản, không tự gắn project của tài khoản cũ sang tài khoản mới.
+- Backend kiểm tra quyền sở hữu project trước khi cho phép đọc/ghi cloud; không nhúng khóa R2 hoặc OAuth client secret vào ứng dụng desktop.
+- Local mode tiếp tục hoạt động khi offline; khi có mạng, đồng bộ phải phát hiện xung đột và giữ các thay đổi chưa được đồng bộ.
+
+Mục này ghi nhận yêu cầu cho các milestone tiếp theo, chưa có nghĩa các chức năng tài khoản, lịch sử và R2 đã được triển khai.

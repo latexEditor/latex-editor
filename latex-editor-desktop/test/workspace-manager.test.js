@@ -90,3 +90,82 @@ test('creates an encoded code-server URL for Unicode Windows paths', (t) => {
   assert.match(url.search, /folder=/);
   assert.equal(url.searchParams.get('folder').includes('Dự án LaTeX'), true);
 });
+
+test('creates each bundled template and copies nested chapter files', (t) => {
+  const manager = fixture(t);
+  manager.templateDir = path.resolve(__dirname, '../resources/templates/basic-article');
+  assert.equal(manager.listTemplates().length, 4);
+  for (const template of manager.listTemplates()) {
+    const project = manager.createProject(`Tài liệu ${template.id}`, template.id);
+    assert.equal(project.hasMainTex, true);
+    assert.match(fs.readFileSync(path.join(project.path, 'main.tex'), 'utf8'), /\\end\{document\}/);
+    if (template.id === 'report') {
+      assert.equal(fs.existsSync(path.join(project.path, 'chapters', 'introduction.tex')), true);
+    }
+  }
+});
+
+test('rejects unknown templates and does not overwrite an existing project', (t) => {
+  const manager = fixture(t);
+  assert.throws(() => manager.createProject('Bad template', '../outside'), /Mẫu project/);
+  assert.equal(fs.existsSync(path.join(manager.projectsDir, 'Bad template')), false);
+  const project = manager.createProject('Existing');
+  fs.writeFileSync(path.join(project.path, 'main.tex'), 'User work');
+  assert.throws(() => manager.createProject('Existing'), /đã tồn tại/);
+  assert.equal(fs.readFileSync(path.join(project.path, 'main.tex'), 'utf8'), 'User work');
+});
+
+test('rejects Windows reserved names before creating a project', (t) => {
+  const manager = fixture(t);
+  for (const name of ['CON', 'nul.tex', 'COM1', 'LPT9', '...', ' ']) {
+    assert.throws(() => manager.createProject(name), /không hợp lệ/);
+  }
+});
+
+test('recent projects survive restart and can reopen a closed tab', (t) => {
+  const manager = fixture(t);
+  const project = manager.createProject('Báo cáo gần đây');
+  manager.closeProject(project.path);
+  const restored = new WorkspaceManager(manager);
+  assert.deepEqual(restored.listOpenProjects(), []);
+  assert.equal(restored.listRecent()[0].path, project.path);
+  restored.openProject(project.path);
+  assert.equal(restored.listOpenProjects()[0].path, project.path);
+});
+
+test('forgetting history preserves files, open tabs and unrelated settings', (t) => {
+  const manager = fixture(t);
+  const project = manager.createProject('Keep my files');
+  const settings = JSON.parse(fs.readFileSync(manager.settingsFile, 'utf8'));
+  fs.writeFileSync(manager.settingsFile, JSON.stringify({ ...settings, customOption: 'keep' }));
+  manager.forgetProject(project.path);
+  assert.deepEqual(manager.listRecent(), []);
+  assert.equal(manager.listOpenProjects()[0].path, project.path);
+  assert.equal(fs.existsSync(path.join(project.path, 'main.tex')), true);
+  assert.equal(JSON.parse(fs.readFileSync(manager.settingsFile, 'utf8')).customOption, 'keep');
+  assert.equal(manager.getProjectLocation(project.path), project.path);
+});
+
+test('missing project folders remain removable from history', (t) => {
+  const manager = fixture(t);
+  const project = manager.createProject('Moved project');
+  fs.renameSync(project.path, `${project.path}-moved`);
+  assert.equal(manager.listRecent()[0].exists, false);
+  assert.deepEqual(manager.listOpenProjects(), []);
+  assert.throws(() => manager.getProjectLocation(project.path), /không còn tồn tại/);
+  manager.forgetProject(project.path);
+  assert.deepEqual(manager.listRecent(), []);
+  assert.equal(fs.existsSync(`${project.path}-moved`), true);
+});
+
+test('reveal location accepts known projects or storage root only', (t) => {
+  const manager = fixture(t);
+  manager.initialize();
+  assert.equal(manager.getProjectLocation(), manager.projectsDir);
+  assert.throws(() => manager.getProjectLocation(manager.templateDir), /chưa được mở/);
+  const project = manager.createProject('Changed to file');
+  fs.renameSync(project.path, `${project.path}-backup`);
+  fs.writeFileSync(project.path, 'not a directory');
+  assert.equal(manager.listRecent()[0].exists, false);
+  assert.throws(() => manager.getProjectLocation(project.path), /không còn tồn tại/);
+});

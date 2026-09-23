@@ -3,7 +3,10 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('latexEditor', {
   getState: () => ipcRenderer.invoke('latex:get-state'),
   listProjects: () => ipcRenderer.invoke('latex:list-projects'),
-  createProject: (name) => ipcRenderer.invoke('latex:create-project', name),
+  listTemplates: () => ipcRenderer.invoke('latex:list-templates'),
+  forgetProject: (projectPath) => ipcRenderer.invoke('latex:forget-project', projectPath),
+  revealProject: (projectPath) => ipcRenderer.invoke('latex:reveal-project', projectPath),
+  createProject: (name, templateId) => ipcRenderer.invoke('latex:create-project', name, templateId),
   chooseProject: () => ipcRenderer.invoke('latex:choose-project'),
   openProject: (projectPath) => ipcRenderer.invoke('latex:open-project', projectPath),
   closeProject: (projectPath) => ipcRenderer.invoke('latex:close-project', projectPath),

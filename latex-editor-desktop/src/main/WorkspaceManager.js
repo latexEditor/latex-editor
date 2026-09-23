@@ -1,6 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { URL } = require('node:url');
+const { PROJECT_TEMPLATES } = require('./ProjectTemplates');
 
 class WorkspaceManager {
   constructor({ projectsDir, settingsFile, templateDir }, dependencies = {}) {
@@ -18,16 +19,29 @@ class WorkspaceManager {
 
   sanitizeProjectName(name) {
     const clean = String(name || '').trim().replace(/[<>:"/\\|?*\x00-\x1F]/g, '-').replace(/[. ]+$/g, '');
-    if (!clean || clean === '.' || clean === '..') throw new Error('Tên project không hợp lệ.');
-    return clean.slice(0, 100);
+    const result = clean.slice(0, 100).replace(/[. ]+$/g, '');
+    if (!result || /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(result)) {
+      throw new Error('Tên project không hợp lệ hoặc là tên dành riêng của Windows.');
+    }
+    return result;
   }
 
-  createProject(name) {
+  listTemplates() {
+    return PROJECT_TEMPLATES.map((template) => ({ ...template }));
+  }
+
+  createProject(name, templateId = 'basic-article') {
+    if (!PROJECT_TEMPLATES.some((template) => template.id === templateId)) {
+      throw new Error('Mẫu project không hợp lệ.');
+    }
     this.initialize();
     const cleanName = this.sanitizeProjectName(name);
     const projectPath = path.join(this.projectsDir, cleanName);
     if (this.fs.existsSync(projectPath)) throw new Error(`Project “${cleanName}” đã tồn tại.`);
-    this.fs.cpSync(this.templateDir, projectPath, { recursive: true, errorOnExist: true });
+    const source = templateId === 'basic-article'
+      ? this.templateDir
+      : path.join(path.dirname(this.templateDir), templateId);
+    this.fs.cpSync(source, projectPath, { recursive: true, errorOnExist: true, force: false });
     this.#writeLatexSettings(projectPath);
     this.remember(projectPath);
     return this.describe(projectPath);
@@ -58,10 +72,13 @@ class WorkspaceManager {
 
   describe(projectPath) {
     const resolved = path.resolve(projectPath);
+    let exists = false;
+    try { exists = this.fs.statSync(resolved).isDirectory(); }
+    catch (error) { if (!['ENOENT', 'ENOTDIR'].includes(error.code)) throw error; }
     return {
       name: path.basename(resolved),
       path: resolved,
-      exists: this.fs.existsSync(resolved),
+      exists,
       hasMainTex: this.fs.existsSync(path.join(resolved, 'main.tex'))
     };
   }
@@ -69,6 +86,28 @@ class WorkspaceManager {
   listRecent() {
     const settings = this.#readSettings();
     return (settings.recentProjects || []).map((item) => this.describe(item));
+  }
+
+  forgetProject(projectPath) {
+    const resolved = path.resolve(projectPath);
+    const settings = this.#readSettings();
+    settings.recentProjects = (settings.recentProjects || []).filter((candidate) => (
+      process.platform === 'win32' ? candidate.toLowerCase() !== resolved.toLowerCase() : candidate !== resolved
+    ));
+    this.fs.writeFileSync(this.settingsFile, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
+    return this.listRecent();
+  }
+
+  getProjectLocation(projectPath) {
+    if (!projectPath) return this.projectsDir;
+    const resolved = path.resolve(projectPath);
+    const known = [...this.listRecent(), ...this.listOpenProjects()].find((project) => (
+      process.platform === 'win32' ? project.path.toLowerCase() === resolved.toLowerCase() : project.path === resolved
+    ));
+    if (!known?.exists || !this.fs.statSync(resolved).isDirectory()) {
+      throw new Error('Thư mục project không còn tồn tại hoặc chưa được mở trong ứng dụng.');
+    }
+    return resolved;
   }
 
   listOpenProjects() {

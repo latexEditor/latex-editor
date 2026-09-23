@@ -20,6 +20,7 @@
 
     <button id="open-project" class="toolbar-button"><span>⌁</span> Mở thư mục</button>
     <button id="new-project" class="toolbar-button primary"><span>＋</span> Project mới</button>
+    <button id="recent-projects" class="toolbar-button" title="Mở lại project gần đây">Gần đây</button>
 
     <div class="spacer"></div>
 
@@ -38,21 +39,50 @@
       <span class="empty-workspace-mark">L</span>
       <h1>Chưa mở project</h1>
       <p>Mở một thư mục LaTeX có sẵn hoặc tạo project mới để bắt đầu.</p>
+      <div class="welcome-actions">
+        <button id="welcome-open">Mở thư mục</button>
+        <button id="welcome-new" class="primary">Tạo project</button>
+      </div>
+      <section class="welcome-recent" aria-labelledby="welcome-recent-title">
+        <h2 id="welcome-recent-title">Project gần đây</h2>
+        <div id="welcome-project-list" class="recent-list"></div>
+        <div id="welcome-error" class="error" role="status"></div>
+      </section>
     </div>
   </main>
 
   <dialog id="new-dialog">
-    <form method="dialog">
+    <form id="new-project-form" method="dialog">
       <h2>Tạo project mới</h2>
-      <p>Project được tạo từ template bài báo cơ bản.</p>
+      <p>Chọn mẫu để bắt đầu tài liệu của bạn.</p>
       <label for="new-project-name">Tên project</label>
       <input id="new-project-name" maxlength="100" placeholder="Ví dụ: Báo cáo tốt nghiệp" autocomplete="off">
+      <fieldset class="template-fieldset">
+        <legend>Mẫu tài liệu</legend>
+        <div id="template-options" class="template-options"></div>
+      </fieldset>
+      <p class="template-note">Nội dung mẫu dùng tiếng Anh. MiKTeX có thể cần cài thêm gói khi build mẫu slide lần đầu.</p>
+      <div class="storage-location"><span>Thư mục lưu project mới</span><code id="new-project-location"></code></div>
       <div id="dialog-error" class="error" aria-live="polite"></div>
       <div class="dialog-actions">
-        <button value="cancel">Hủy</button>
-        <button id="create-confirm" value="default" class="primary">Tạo project</button>
+        <button id="create-cancel" type="button">Hủy</button>
+        <button id="create-confirm" type="submit" class="primary">Tạo project</button>
       </div>
     </form>
+  </dialog>
+
+  <dialog id="recent-dialog" aria-labelledby="recent-title">
+    <h2 id="recent-title">Project gần đây</h2>
+    <p>Mở lại project đã đóng. Bỏ khỏi lịch sử không xóa file trên máy.</p>
+    <label for="project-search">Tìm theo tên hoặc đường dẫn</label>
+    <input id="project-search" type="search" placeholder="Tìm project…" autocomplete="off">
+    <div id="recent-project-list" class="recent-list"></div>
+    <div id="recent-error" class="error" role="status"></div>
+    <div class="storage-location"><span>Thư mục lưu project mới</span><code id="recent-project-location"></code></div>
+    <div class="dialog-actions">
+      <button id="reveal-projects-root" type="button">Mở nơi lưu project</button>
+      <button id="recent-close" type="button" class="primary">Đóng</button>
+    </div>
   </dialog>
 
   <dialog id="runtime-dialog">

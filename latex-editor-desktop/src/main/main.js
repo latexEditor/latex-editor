@@ -15,6 +15,7 @@ let runtimeManager;
 let activeProject;
 let serverUrl;
 let quitting = false;
+let shellOverlayOpen = false;
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 
 function state() {
@@ -22,6 +23,7 @@ function state() {
     phase: serverUrl ? 'ready' : 'starting',
     project: activeProject || null,
     openProjects: workspaceManager?.listOpenProjects() || [],
+    projectsDir: workspaceManager?.projectsDir || '',
     serverUrl: serverUrl?.toString() || null
   };
 }
@@ -32,7 +34,7 @@ function notifyState() {
 
 function layoutEditor() {
   if (!mainWindow || !editorView) return;
-  if (!activeProject) {
+  if (!activeProject || shellOverlayOpen) {
     hideEditor();
     return;
   }
@@ -148,8 +150,8 @@ async function startup() {
     runtimeManager,
     openProject: loadProject,
     closeProject: closeProjectTab,
-    hideEditor,
-    showEditor,
+    hideEditor: () => { shellOverlayOpen = true; hideEditor(); },
+    showEditor: () => { shellOverlayOpen = false; showEditor(); },
     getState: state
   });
   session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
