@@ -1,0 +1,12 @@
+{
+  "name": "latex-editor-cloud",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/worker.test.js",
+    "check": "node --check src/index.js",
+    "dev": "npx wrangler@4.120.0 dev",
+    "deploy": "npx wrangler@4.120.0 deploy"
+  }
+}

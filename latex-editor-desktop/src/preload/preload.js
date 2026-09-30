@@ -13,6 +13,16 @@ contextBridge.exposeInMainWorld('latexEditor', {
   hideEditor: () => ipcRenderer.invoke('latex:hide-editor'),
   showEditor: () => ipcRenderer.invoke('latex:show-editor'),
   getRuntimeStatus: () => ipcRenderer.invoke('latex:get-runtime-status'),
+  historyList: (project) => ipcRenderer.invoke('latex:history-list', project),
+  historySave: (project, message) => ipcRenderer.invoke('latex:history-save', project, message),
+  historyDiff: (project, hash) => ipcRenderer.invoke('latex:history-diff', project, hash),
+  historyRestore: (project, hash) => ipcRenderer.invoke('latex:history-restore', project, hash),
+  authStatus: () => ipcRenderer.invoke('latex:auth-status'),
+  login: () => ipcRenderer.invoke('latex:auth-login'),
+  logout: () => ipcRenderer.invoke('latex:auth-logout'),
+  cloudList: () => ipcRenderer.invoke('latex:cloud-list'),
+  cloudUpload: (project) => ipcRenderer.invoke('latex:cloud-upload', project),
+  cloudDownload: (id) => ipcRenderer.invoke('latex:cloud-download', id),
   onStateChanged: (callback) => {
     const listener = (_event, state) => callback(state);
     ipcRenderer.on('latex:state-changed', listener);

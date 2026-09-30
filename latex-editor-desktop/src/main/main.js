@@ -1,10 +1,14 @@
-const { app, BrowserWindow, WebContentsView, dialog, ipcMain, shell, session } = require('electron');
+const { app, BrowserWindow, WebContentsView, dialog, ipcMain, shell, session, safeStorage } = require('electron');
 const path = require('node:path');
 const config = require('./config');
 const { CodeServerManager } = require('./CodeServerManager');
 const { WorkspaceManager } = require('./WorkspaceManager');
 const { LatexRuntimeManager } = require('./LatexRuntimeManager');
 const { registerIpc } = require('./ipc');
+const { HistoryManager } = require('./HistoryManager');
+const { AuthManager } = require('./AuthManager');
+const { CloudSyncManager } = require('./CloudSyncManager');
+const { registerFeatureIpc } = require('./featureIpc');
 
 const TOPBAR_HEIGHT = 48;
 let mainWindow;
@@ -12,6 +16,7 @@ let editorView;
 let serverManager;
 let workspaceManager;
 let runtimeManager;
+let authManager;
 let activeProject;
 let serverUrl;
 let quitting = false;
@@ -24,6 +29,7 @@ function state() {
     project: activeProject || null,
     openProjects: workspaceManager?.listOpenProjects() || [],
     projectsDir: workspaceManager?.projectsDir || '',
+    auth: authManager?.status() || { configured: false, signedIn: false },
     serverUrl: serverUrl?.toString() || null
   };
 }
@@ -137,6 +143,11 @@ async function startup() {
   workspaceManager = new WorkspaceManager(config, { runtimeStatus });
   serverManager = new CodeServerManager(config);
   workspaceManager.initialize();
+  const history = new HistoryManager(config);
+  authManager = new AuthManager(config, { safeStorage, openExternal: (url) => shell.openExternal(url), onChange: notifyState });
+  await authManager.initialize();
+  const cloud = new CloudSyncManager(config, { auth: authManager, history, workspace: workspaceManager });
+  registerFeatureIpc({ ipcMain, dialog, workspace: workspaceManager, history, auth: authManager, cloud, openProject: loadProject });
   const restoredProjects = workspaceManager.listOpenProjects();
   const mostRecentOpenProject = workspaceManager.listRecent().find((recentProject) => (
     restoredProjects.some((openProject) => openProject.path.toLowerCase() === recentProject.path.toLowerCase())
@@ -165,6 +176,7 @@ async function startup() {
 async function shutdown() {
   if (quitting) return;
   quitting = true;
+  authManager?.dispose();
   await Promise.allSettled([serverManager?.stop()]);
 }
 

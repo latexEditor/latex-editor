@@ -12,7 +12,7 @@
     "dev": "electron .",
     "test": "node --test test",
     "test:ui": "electron scripts/test-project-ui.cjs",
-    "check": "node --check src/main/config.js && node --check src/main/CodeServerManager.js && node --check src/main/WorkspaceManager.js && node --check src/main/LatexRuntimeManager.js && node --check src/main/ipc.js && node --check src/main/main.js && node --check src/preload/preload.js && node --check src/renderer/app.js",
+    "check": "node scripts/check-syntax.cjs",
     "setup:code-server": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/setup-code-server-runtime.ps1",
     "setup:latex-workshop": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/setup-latex-workshop.ps1",
     "check:latex": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-latex-runtime.ps1",

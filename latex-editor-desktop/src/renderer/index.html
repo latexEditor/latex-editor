@@ -21,8 +21,10 @@
     <button id="open-project" class="toolbar-button"><span>⌁</span> Mở thư mục</button>
     <button id="new-project" class="toolbar-button primary"><span>＋</span> Project mới</button>
     <button id="recent-projects" class="toolbar-button" title="Mở lại project gần đây">Gần đây</button>
+    <button id="history-button" class="toolbar-button feature-button" title="Lịch sử phiên bản" aria-label="Lịch sử phiên bản" disabled><span>↶</span><span class="feature-label">Lịch sử</span></button>
 
     <div class="spacer"></div>
+    <button id="account-button" class="toolbar-button feature-button" title="Tài khoản và đồng bộ cloud" aria-label="Tài khoản và đồng bộ cloud"><span>☁</span><span id="account-label" class="feature-label">Tài khoản</span></button>
 
     <button id="runtime-details" class="runtime-button" title="Xem trạng thái LaTeX runtime">
       <span id="runtime-dot" class="dot checking"></span>
@@ -92,6 +94,47 @@
       <div class="dialog-actions"><button value="close" class="primary">Đóng</button></div>
     </form>
   </dialog>
+  <dialog id="history-dialog" aria-labelledby="history-title">
+    <h2 id="history-title">Lịch sử project</h2>
+    <p id="history-project-name"></p>
+    <p class="feature-note">Nhấn Ctrl+S trong editor trước khi lưu phiên bản. Lịch sử lưu các file trên ổ đĩa; bỏ qua build, .git, node_modules, .env và file khóa riêng.</p>
+    <form id="history-save-form" class="history-save-form">
+      <label class="visually-hidden" for="history-message">Ghi chú phiên bản</label>
+      <input id="history-message" maxlength="300" placeholder="Ví dụ: Hoàn thành chương 1" autocomplete="off" required>
+      <button id="history-save" type="submit" class="primary">Lưu phiên bản</button>
+    </form>
+    <div class="history-panels">
+      <div id="history-list" class="history-list" aria-label="Các phiên bản"></div>
+      <pre id="history-diff" tabindex="0">Chọn một phiên bản để xem thay đổi.</pre>
+    </div>
+    <div id="history-feedback" class="feature-feedback" role="status"></div>
+    <div class="dialog-actions">
+      <button id="history-refresh" type="button">Làm mới</button>
+      <button id="history-restore" type="button" disabled>Khôi phục bản đã chọn</button>
+      <button id="history-close" type="button">Đóng</button>
+    </div>
+  </dialog>
+
+  <dialog id="account-dialog" aria-labelledby="account-title">
+    <h2 id="account-title">Tài khoản &amp; Cloud</h2>
+    <p id="account-description">Bạn đang dùng chế độ local.</p>
+    <div class="account-actions">
+      <button id="google-login" type="button" class="primary">Đăng nhập bằng Google</button>
+      <button id="account-logout" type="button" hidden>Đăng xuất</button>
+    </div>
+    <section id="cloud-section" hidden>
+      <h3>Project trên cloud</h3>
+      <p class="feature-note">Đồng bộ sẽ lưu phiên bản mới từ các file trên ổ đĩa. Tải project tạo một bản sao riêng cùng toàn bộ lịch sử.</p>
+      <div class="account-actions">
+        <button id="cloud-upload" type="button">Đồng bộ project đang mở</button>
+        <button id="cloud-refresh" type="button">Làm mới danh sách</button>
+      </div>
+      <div id="cloud-projects" class="recent-list"></div>
+    </section>
+    <div id="account-feedback" class="feature-feedback" role="status"></div>
+    <div class="dialog-actions"><button id="account-close" type="button">Đóng</button></div>
+  </dialog>
   <script src="app.js"></script>
+  <script src="features.js"></script>
 </body>
 </html>

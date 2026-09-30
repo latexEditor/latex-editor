@@ -236,4 +236,28 @@ dialog .template-note { font-size: 12px; margin: 0; }
   .brand strong, .runtime-button span:not(.dot), .status span:not(.dot) { display: none; }
   .runtime-button { display: flex; align-items: center; padding: 10px; }
   .topbar { gap: 8px; }
+  .feature-button .feature-label { display: none; }
 }
+
+#history-dialog { width: min(960px, calc(100vw - 40px)); }
+#account-dialog { width: min(700px, calc(100vw - 40px)); }
+dialog .feature-note { font-size: 12px; margin-bottom: 14px; }
+.history-save-form, .account-actions { display: flex; gap: 8px; margin: 16px 0; }
+.history-save-form input { min-width: 0; flex: 1; }
+.history-save-form button { white-space: nowrap; }
+.history-panels { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 12px; margin-top: 16px; height: 320px; }
+.history-list { overflow-y: auto; font-size: 13px; }
+.history-entry { display: block; text-align: left; width: 100%; margin-bottom: 7px; overflow-wrap: anywhere; box-shadow: none; }
+.history-entry strong, .history-entry small { display: block; }
+.history-entry small { color: #64748b; margin-top: 6px; line-height: 1.5; font-size: 11px; }
+.history-entry.selected { border-color: #60a5fa; background: #eff6ff; }
+#history-diff { margin: 0; padding: 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; overflow: auto; white-space: pre; font: 12px/1.6 ui-monospace, monospace; user-select: text; }
+.feature-feedback { min-height: 22px; margin-top: 12px; color: #047857; font-size: 13px; overflow-wrap: anywhere; }
+.feature-feedback.is-error { color: #b91c1c; }
+.cloud-project { display: flex; align-items: center; gap: 12px; padding: 10px; border: 1px solid #e2e8f0; border-radius: 7px; }
+.cloud-project span { flex: 1; overflow-wrap: anywhere; font-size: 13px; }
+.cloud-project button { flex-shrink: 0; }
+#cloud-projects { max-height: 260px; overflow-y: auto; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.feature-button .feature-label { font-size: 13px; font-weight: 500; }
+[hidden] { display: none !important; }

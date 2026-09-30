@@ -4,9 +4,13 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, shell, safeStorage } = require('electron');
 const { WorkspaceManager } = require('../src/main/WorkspaceManager');
 const { registerIpc } = require('../src/main/ipc');
+const { HistoryManager } = require('../src/main/HistoryManager');
+const { AuthManager } = require('../src/main/AuthManager');
+const { CloudSyncManager } = require('../src/main/CloudSyncManager');
+const { registerFeatureIpc } = require('../src/main/featureIpc');
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'latex-editor-ui-'));
 app.setPath('userData', path.join(root, 'electron'));
@@ -23,10 +27,18 @@ let overlayOpen = false;
 let choosingCount = 0;
 const revealed = [];
 const errors = [];
-const state = () => ({ phase: 'ready', project: activeProject, openProjects: manager.listOpenProjects(), projectsDir: manager.projectsDir });
+const history = new HistoryManager({ historyDir: path.join(root, 'history') });
+const auth = new AuthManager({ apiUrl: '', sessionFile: path.join(root, 'session.bin') }, { safeStorage, openExternal: async () => {}, onChange: () => { if (window) notify(); } });
+const cloud = new CloudSyncManager({ cloudDir: path.join(root, 'cloud') }, { auth, history, workspace: manager });
+const state = () => ({ phase: 'ready', project: activeProject, openProjects: manager.listOpenProjects(), projectsDir: manager.projectsDir, auth: auth.status() });
 const notify = () => window.webContents.send('latex:state-changed', state());
 shell.openPath = async (location) => { revealed.push(location); return ''; };
 dialog.showOpenDialog = async () => { choosingCount += 1; return { canceled: true, filePaths: [] }; };
+let restoreAnswer = 0;
+dialog.showMessageBox = async () => ({ response: restoreAnswer });
+registerFeatureIpc({ ipcMain, dialog, workspace: manager, history, auth, cloud,
+  openProject: async (location) => { activeProject = manager.openProject(location); notify(); }
+});
 
 registerIpc({
   ipcMain, dialog, workspaceManager: manager,
@@ -46,13 +58,15 @@ async function waitFor(predicate, message) {
     if (await predicate()) return;
     await new Promise((resolve) => setTimeout(resolve, 30));
   }
-  throw new Error(`Timed out: ${message}`);
+  const page = window && !window.isDestroyed() ? await evaluate(() => ({ width: window.innerWidth, tabs: document.querySelectorAll('.project-tab').length })) : null;
+  throw new Error(`Timed out: ${message}; page=${JSON.stringify(page)}`);
 }
 const waitForPage = (predicate, message) => waitFor(() => evaluate(predicate), message);
 async function capture(name) {
   if (!process.env.LATEX_EDITOR_UI_SCREENSHOTS) return;
   const directory = path.resolve(process.env.LATEX_EDITOR_UI_SCREENSHOTS);
   fs.mkdirSync(directory, { recursive: true });
+  await evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   const image = await window.webContents.capturePage();
   fs.writeFileSync(path.join(directory, `${name}.png`), image.toPNG());
 }
@@ -62,10 +76,11 @@ async function run() {
     show: false, width: 1100, height: 820,
     webPreferences: {
       preload: path.resolve(__dirname, '../src/preload/preload.js'),
-      nodeIntegration: false, contextIsolation: true, sandbox: true
+      nodeIntegration: false, contextIsolation: true, sandbox: true,
+      offscreen: true, backgroundThrottling: false
     }
   });
-  window.webContents.on('console-message', (_event, details) => {
+  window.webContents.on('console-message', (details) => {
     if (details.level === 'error') errors.push(details.message);
   });
   await window.loadFile(path.resolve(__dirname, '../src/renderer/index.html'));
@@ -85,6 +100,86 @@ async function run() {
   await waitFor(() => !overlayOpen, 'restore editor');
   const report = activeProject;
   assert.equal(fs.existsSync(path.join(report.path, 'chapters', 'introduction.tex')), true);
+
+  const originalTex = fs.readFileSync(path.join(report.path, 'main.tex'), 'utf8');
+  await click('#history-button');
+  await waitForPage(() => document.querySelector('#history-dialog').open && !document.querySelector('#history-save').disabled, 'history dialog ready');
+  await evaluate(() => {
+    document.querySelector('#history-message').value = 'Bản đầu';
+    document.querySelector('#history-save-form').requestSubmit();
+  });
+  await waitForPage(() => document.querySelectorAll('.history-entry').length === 1 && !document.querySelector('#history-save').disabled, 'first snapshot');
+  fs.writeFileSync(path.join(report.path, 'main.tex'), originalTex + '\n% Second version\n');
+  await evaluate(() => {
+    document.querySelector('#history-message').value = 'Bổ sung chương';
+    document.querySelector('#history-save-form').requestSubmit();
+  });
+  await waitForPage(() => document.querySelectorAll('.history-entry').length === 2 && !document.querySelector('#history-save').disabled, 'second snapshot');
+  await click('.history-entry:first-child');
+  await waitForPage(() => document.querySelector('#history-diff').textContent.includes('+% Second version'), 'rendered Git diff');
+  await capture('history');
+  await click('.history-entry:last-child');
+  await waitForPage(() => !document.querySelector('#history-restore').disabled, 'selected old version');
+  await click('#history-restore');
+  await waitForPage(() => document.querySelector('#history-feedback').textContent.includes('Đã hủy'), 'cancel restoration');
+  assert.equal(fs.readFileSync(path.join(report.path, 'main.tex'), 'utf8'), originalTex + '\n% Second version\n');
+  restoreAnswer = 1;
+  await click('#history-restore');
+  await waitForPage(() => document.querySelector('#history-feedback').textContent.includes('Đã khôi phục'), 'restore with backup');
+  assert.equal(fs.readFileSync(path.join(report.path, 'main.tex'), 'utf8'), originalTex);
+  assert.equal((await history.list(report.path)).length, 4);
+  await click('#history-close');
+  await waitFor(() => !overlayOpen, 'restore editor after history');
+  await click('#account-button');
+  await waitForPage(() => document.querySelector('#account-description').textContent.includes('chưa được thiết lập'), 'unconfigured cloud state');
+  assert.equal(await evaluate(() => document.querySelector('#google-login').disabled), true);
+  await capture('account-local');
+  await click('#account-close');
+  await waitFor(() => !overlayOpen, 'restore editor after account');
+
+  // Use the real Worker routes and an in-memory R2 binding. Only Google's
+  // external identity endpoints are fixtures; no production cloud is contacted.
+  const { handleRequest } = await import('../../latex-editor-cloud/src/index.js');
+  const { environment } = await import('../../latex-editor-cloud/test/support.js');
+  const cloudEnvironment = environment();
+  const google = async (url) => Response.json(url.includes('/token')
+    ? { access_token: 'test-google-access' }
+    : { sub: 'ui-user', name: 'UI Test User', email: 'ui@example.test', email_verified: true });
+  auth.apiUrl = cloudEnvironment.PUBLIC_BASE_URL;
+  auth.fetch = (url, options) => handleRequest(new Request(url, options), cloudEnvironment, google);
+  auth.openExternal = async (target) => {
+    const start = await handleRequest(new Request(target), cloudEnvironment, google);
+    const googleUrl = new URL(start.headers.get('Location'));
+    const callback = new URL(auth.apiUrl + '/auth/google/callback');
+    callback.search = new URLSearchParams({ state: googleUrl.searchParams.get('state'), code: 'test-google-code' }).toString();
+    const redirect = await handleRequest(new Request(callback), cloudEnvironment, google);
+    await fetch(redirect.headers.get('Location')); // The app's loopback callback.
+  };
+  notify();
+  await click('#account-button');
+  await waitForPage(() => !document.querySelector('#google-login').disabled, 'Google login enabled');
+  await click('#google-login');
+  await waitForPage(() => document.querySelector('#account-feedback').textContent.includes('Đăng nhập thành công'), 'Google login through Worker');
+  assert.equal(auth.status().user.email, 'ui@example.test');
+  await click('#cloud-upload');
+  await waitForPage(() => document.querySelectorAll('.cloud-project').length === 1 && document.querySelector('#account-feedback').textContent.includes('đồng bộ'), 'upload history to cloud');
+  await capture('account-cloud');
+  await click('.cloud-project button');
+  await waitForPage(() => document.querySelector('#account-feedback').textContent.includes('Đã tải'), 'download cloud project');
+  const cloudCopy = activeProject;
+  assert.notEqual(cloudCopy.path, report.path);
+  assert.equal((await history.list(cloudCopy.path)).length, 4);
+  assert.equal(fs.readFileSync(path.join(cloudCopy.path, 'main.tex'), 'utf8'), originalTex);
+  await click('#account-logout');
+  await waitForPage(() => document.querySelector('#account-feedback').textContent.includes('Đã đăng xuất'), 'logout');
+  assert.equal(auth.status().signedIn, false);
+  assert.equal(fs.existsSync(auth.sessionFile), false);
+  assert.equal(fs.existsSync(path.join(cloudCopy.path, 'main.tex')), true);
+  await click('#account-close');
+  manager.closeProject(cloudCopy.path);
+  manager.forgetProject(cloudCopy.path);
+  activeProject = manager.openProject(report.path);
+  notify();
   await click('.project-tab-close');
   await waitForPage(() => !document.querySelector('#empty-workspace').hidden && document.querySelectorAll('#welcome-project-list .recent-project').length === 1, 'closed project on welcome page');
   await capture('welcome');
@@ -155,7 +250,8 @@ async function run() {
   }
   notify();
   window.setSize(960, 640);
-  await waitForPage(() => window.innerWidth <= 960 && document.querySelectorAll('.project-tab').length === 7, 'compact toolbar');
+  // Windows display scaling can round the offscreen viewport by one CSS pixel.
+  await waitForPage(() => Math.abs(window.innerWidth - 960) <= 2 && document.querySelectorAll('.project-tab').length === 7, 'compact toolbar');
   assert.equal(await evaluate(() => {
     const end = document.querySelector('.status').getBoundingClientRect().right;
     return end <= window.innerWidth - 139;
@@ -167,16 +263,20 @@ async function run() {
   assert.equal(await evaluate(() => document.querySelector('.empty-workspace-card').getBoundingClientRect().top >= 48), true, 'welcome screen must scroll without clipping its top');
   await capture('welcome-small-window');
   assert.deepEqual(errors, []);
-  console.log('PASS: templates, create/close/reopen, Unicode search, reveal paths, forget safely, missing folders, repeated dialogs, duplicate validation, compact window layout.');
+  console.log('PASS: projects, templates, history, diff, cancel/restore with backup, Google loopback login, cloud upload/download with full history, logout, compact layout.');
 }
 
-const timeout = setTimeout(() => { console.error('UI test timeout'); app.exit(1); }, 45000);
+const timeout = setTimeout(() => { console.error('UI test timeout'); app.exit(1); }, 60000);
 app.whenReady().then(run).then(() => finish(0), (error) => { console.error(error); finish(1); });
-function finish(code) {
+async function finish(code) {
   clearTimeout(timeout);
   if (window && !window.isDestroyed()) window.destroy();
+  window = null;
+  auth.dispose();
   // Electron may still hold its cache files; remove only our project fixtures.
-  fs.rmSync(manager.projectsDir, { recursive: true, force: true });
-  fs.rmSync(manager.settingsFile, { force: true });
+  for (const fixture of [manager.projectsDir, manager.settingsFile, history.root]) {
+    try { await fs.promises.rm(fixture, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }); }
+    catch (error) { console.warn(`Temporary fixture cleanup deferred: ${error.message}`); }
+  }
   app.exit(code);
 }
