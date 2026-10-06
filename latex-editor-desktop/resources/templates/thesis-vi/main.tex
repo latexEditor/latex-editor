@@ -1,0 +1,46 @@
+% !TeX program = xelatex
+\documentclass[12pt,a4paper,oneside]{report}
+\usepackage{fontspec}
+\setmainfont{Latin Modern Roman}
+\usepackage[left=3cm,right=2.5cm,top=2.5cm,bottom=2.5cm]{geometry}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage[unicode,colorlinks=true,linkcolor=blue,urlcolor=blue]{hyperref}
+\renewcommand{\contentsname}{Mục lục}
+\renewcommand{\chaptername}{Chương}
+\renewcommand{\bibname}{Tài liệu tham khảo}
+\renewcommand{\figurename}{Hình}
+\renewcommand{\tablename}{Bảng}
+\begin{document}
+\begin{titlepage}
+\centering
+{\large TÊN TRƯỜNG ĐẠI HỌC\\KHOA / VIỆN}\\[3cm]
+{\LARGE\bfseries LUẬN VĂN TỐT NGHIỆP}\\[1cm]
+{\Large TÊN ĐỀ TÀI NGHIÊN CỨU}\\[2cm]
+Sinh viên thực hiện: Họ và tên\\[0.4cm]
+Mã sinh viên: 000000\\[0.4cm]
+Người hướng dẫn: Họ và tên
+\vfill
+Địa điểm, năm 2026
+\end{titlepage}
+\pagenumbering{roman}
+\chapter*{Lời cảm ơn}
+Viết lời cảm ơn của bạn ở đây.
+\chapter*{Tóm tắt}
+Trình bày ngắn gọn vấn đề nghiên cứu, phương pháp và kết quả chính.
+\tableofcontents
+\clearpage
+\pagenumbering{arabic}
+\input{chapters/introduction}
+\chapter{Phương pháp nghiên cứu}
+Mô tả mô hình, quy trình và cách đánh giá.
+\chapter{Kết quả và thảo luận}
+Trình bày kết quả, đối chiếu với mục tiêu ban đầu và phân tích giới hạn.
+\chapter{Kết luận}
+Tổng hợp đóng góp và hướng nghiên cứu tiếp theo.
+\begin{thebibliography}{9}
+\bibitem{latex} Dự án LaTeX.
+\textit{Tài liệu hướng dẫn LaTeX}.
+\url{https://www.latex-project.org/help/documentation/}.
+\end{thebibliography}
+\end{document}

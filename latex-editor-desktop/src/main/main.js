@@ -137,9 +137,7 @@ async function createWindow() {
 async function startup() {
   runtimeManager = new LatexRuntimeManager();
   const runtimeStatus = runtimeManager.getStatus();
-  config.additionalPath = [...new Set(runtimeStatus.tools
-    .filter((tool) => tool.available)
-    .map((tool) => path.dirname(tool.path)))].join(path.delimiter);
+  config.additionalPath = runtimeStatus.pathEntries.join(path.delimiter);
   workspaceManager = new WorkspaceManager(config, { runtimeStatus });
   serverManager = new CodeServerManager(config);
   workspaceManager.initialize();

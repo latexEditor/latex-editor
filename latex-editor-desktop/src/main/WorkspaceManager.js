@@ -31,7 +31,8 @@ class WorkspaceManager {
   }
 
   createProject(name, templateId = 'basic-article') {
-    if (!PROJECT_TEMPLATES.some((template) => template.id === templateId)) {
+    const template = PROJECT_TEMPLATES.find((item) => item.id === templateId);
+    if (!template) {
       throw new Error('Mẫu project không hợp lệ.');
     }
     this.initialize();
@@ -42,7 +43,7 @@ class WorkspaceManager {
       ? this.templateDir
       : path.join(path.dirname(this.templateDir), templateId);
     this.fs.cpSync(source, projectPath, { recursive: true, errorOnExist: true, force: false });
-    this.#writeLatexSettings(projectPath);
+    this.#writeLatexSettings(projectPath, template.engine);
     this.remember(projectPath);
     return this.describe(projectPath);
   }
@@ -65,7 +66,7 @@ class WorkspaceManager {
     if (!this.fs.existsSync(resolved) || !this.fs.statSync(resolved).isDirectory()) {
       throw new Error(`Không tìm thấy thư mục project: ${resolved}`);
     }
-    this.#writeLatexSettings(resolved);
+    this.#writeLatexSettings(resolved, this.#detectLatexEngine(resolved));
     this.remember(resolved);
     return this.describe(resolved);
   }
@@ -168,31 +169,84 @@ class WorkspaceManager {
     }
   }
 
-  #writeLatexSettings(projectPath) {
+  #detectLatexEngine(projectPath) {
+    const texFiles = [];
+    const mainFile = path.join(projectPath, 'main.tex');
+    if (this.fs.existsSync(mainFile)) texFiles.push(mainFile);
+    try {
+      for (const entry of this.fs.readdirSync(projectPath, { withFileTypes: true })) {
+        if (entry.isFile() && /\.tex$/i.test(entry.name)) {
+          const candidate = path.join(projectPath, entry.name);
+          if (candidate !== mainFile) texFiles.push(candidate);
+        }
+      }
+    } catch {}
+
+    for (const file of texFiles) {
+      let source;
+      try { source = this.fs.readFileSync(file, 'utf8'); }
+      catch { continue; }
+      const program = source.match(/^\s*%\s*!\s*TeX\s+(?:TS-)?program\s*=\s*([^\s]+)/im)?.[1]?.toLowerCase();
+      if (program === 'xelatex' || /\\usepackage(?:\[[^\]]*\])?\{fontspec\}/i.test(source)) return 'xelatex';
+      if (/^\s*%.*(?:compiler|engine)\s*=\s*xelatex\b/im.test(source)) return 'xelatex';
+    }
+
+    for (const name of ['latexmkrc', '.latexmkrc']) {
+      try {
+        const config = this.fs.readFileSync(path.join(projectPath, name), 'utf8');
+        if (/\$pdf_mode\s*=\s*5\s*;/i.test(config)) return 'xelatex';
+      } catch (error) {
+        if (error.code !== 'ENOENT') throw error;
+      }
+    }
+    return 'pdflatex';
+  }
+
+  #writeLatexSettings(projectPath, engine = 'pdflatex') {
     const vscodeDir = path.join(projectPath, '.vscode');
     const settingsPath = path.join(vscodeDir, 'settings.json');
     this.fs.mkdirSync(vscodeDir, { recursive: true });
-    const preferredTool = this.runtimeStatus?.tools?.find((tool) => (
+    const latexmkUsable = Boolean(this.runtimeStatus?.tools?.find((tool) => (
       tool.name === 'latexmk' && tool.available && tool.usable !== false
-    ))
-      ? 'latexmk'
-      : 'pdflatex';
-    const tools = preferredTool === 'latexmk'
-      ? [{
-        name: 'latexmk', command: 'latexmk',
-        args: ['-synctex=1', '-interaction=nonstopmode', '-file-line-error', '-pdf', '-outdir=%OUTDIR%', '%DOC%']
-      }]
-      : [{
-        name: 'pdflatex', command: 'pdflatex',
-        args: ['-synctex=1', '-interaction=nonstopmode', '-file-line-error', '-output-directory=%OUTDIR%', '%DOC%']
-      }];
+    )));
+    const profile = engine === 'xelatex'
+      ? (latexmkUsable
+        ? {
+          name: 'latexmk-xelatex', recipeTools: ['latexmk-xelatex'],
+          tool: {
+            name: 'latexmk-xelatex', command: 'latexmk',
+            args: ['-synctex=1', '-interaction=nonstopmode', '-file-line-error', '-xelatex', '-outdir=%OUTDIR%', '%DOC%']
+          }
+        }
+        : {
+          name: 'xelatex', recipeTools: ['xelatex', 'xelatex'],
+          tool: {
+            name: 'xelatex', command: 'xelatex',
+            args: ['-synctex=1', '-interaction=nonstopmode', '-file-line-error', '-output-directory=%OUTDIR%', '%DOC%']
+          }
+        })
+      : (latexmkUsable
+        ? {
+          name: 'latexmk', recipeTools: ['latexmk'],
+          tool: {
+            name: 'latexmk', command: 'latexmk',
+            args: ['-synctex=1', '-interaction=nonstopmode', '-file-line-error', '-pdf', '-outdir=%OUTDIR%', '%DOC%']
+          }
+        }
+        : {
+          name: 'pdflatex', recipeTools: ['pdflatex'],
+          tool: {
+            name: 'pdflatex', command: 'pdflatex',
+            args: ['-synctex=1', '-interaction=nonstopmode', '-file-line-error', '-output-directory=%OUTDIR%', '%DOC%']
+          }
+        });
     const settings = {
       'window.commandCenter': false,
       'window.customTitleBarVisibility': 'never',
       'latex-workshop.latex.autoBuild.run': 'onSave',
       'latex-workshop.latex.outDir': '%DIR%/build',
-      'latex-workshop.latex.recipes': [{ name: preferredTool, tools: [preferredTool] }],
-      'latex-workshop.latex.tools': tools,
+      'latex-workshop.latex.recipes': [{ name: profile.name, tools: profile.recipeTools }],
+      'latex-workshop.latex.tools': [profile.tool],
       'latex-workshop.view.pdf.viewer': 'tab',
       'latex-workshop.view.pdf.tab.editorGroup': 'right',
       'latex-workshop.synctex.afterBuild.enabled': true,
@@ -204,14 +258,22 @@ class WorkspaceManager {
         const current = JSON.parse(this.fs.readFileSync(settingsPath, 'utf8'));
         const recipe = current['latex-workshop.latex.recipes'];
         const currentTools = current['latex-workshop.latex.tools'];
-        const managedRecipe = Array.isArray(recipe) && recipe.length === 1
-          && ['latexmk', 'pdflatex'].includes(recipe[0]?.name)
-          && recipe[0]?.tools?.length === 1
-          && recipe[0].tools[0] === recipe[0].name;
-        const managedTools = Array.isArray(currentTools) && currentTools.length === 1
-          && currentTools[0]?.name === recipe?.[0]?.name
-          && currentTools[0]?.command === recipe?.[0]?.name;
-        if (!managedRecipe || !managedTools || recipe[0].name === preferredTool) return;
+        const managedProfiles = [
+          { name: 'latexmk', tools: ['latexmk'], tool: 'latexmk', command: 'latexmk' },
+          { name: 'pdflatex', tools: ['pdflatex'], tool: 'pdflatex', command: 'pdflatex' },
+          { name: 'xelatex', tools: ['xelatex', 'xelatex'], tool: 'xelatex', command: 'xelatex' },
+          { name: 'latexmk-xelatex', tools: ['latexmk-xelatex'], tool: 'latexmk-xelatex', command: 'latexmk' }
+        ];
+        const managed = managedProfiles.some((candidate) => recipe?.length === 1 && currentTools?.length === 1
+          && recipe[0]?.name === candidate.name
+          && JSON.stringify(recipe[0]?.tools) === JSON.stringify(candidate.tools)
+          && currentTools[0]?.name === candidate.tool
+          && currentTools[0]?.command === candidate.command);
+        const alreadyCurrent = recipe?.[0]?.name === profile.name
+          && JSON.stringify(recipe[0]?.tools) === JSON.stringify(profile.recipeTools)
+          && currentTools?.[0]?.name === profile.tool.name
+          && currentTools[0]?.command === profile.tool.command;
+        if (!managed || alreadyCurrent) return;
         const migrated = {
           ...current,
           'latex-workshop.latex.recipes': settings['latex-workshop.latex.recipes'],

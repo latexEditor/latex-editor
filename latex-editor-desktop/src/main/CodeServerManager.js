@@ -2,6 +2,7 @@ const fs = require('node:fs');
 const net = require('node:net');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
+const { ensureBuildOpensPdf } = require('./LatexWorkshopIntegration');
 
 class CodeServerManager {
   constructor(config, log = console, dependencies = {}) {
@@ -37,6 +38,8 @@ class CodeServerManager {
     this.recentOutput = [];
     fs.mkdirSync(this.config.appDataDir, { recursive: true });
     fs.mkdirSync(this.config.extensionsDir, { recursive: true });
+    const integration = ensureBuildOpensPdf(this.config.extensionsDir);
+    if (integration.patched) this.log.info(`Enabled Build -> PDF for ${integration.extensionMain}`);
     this.#writeGlobalSettings();
 
     const args = [

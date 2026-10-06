@@ -88,9 +88,44 @@ async function run() {
   assert.equal(await evaluate(() => document.querySelector('#empty-workspace').hidden), false);
 
   await click('#welcome-new');
-  await waitForPage(() => document.querySelectorAll('input[name="project-template"]').length === 4, 'template choices');
+  await waitForPage(() => document.querySelectorAll('input[name="project-template"]').length === 7, 'template choices');
+  await waitForPage(() => {
+    const previews = [...document.querySelectorAll('.template-preview img')];
+    return previews.length === 7 && previews.every((image) => image.complete && image.naturalWidth > 0 && image.naturalHeight > 0);
+  }, 'template preview images');
+  assert.equal(await evaluate(() => document.querySelector('.template-preview').getBoundingClientRect().height >= 180), true, 'regular template cards should show a large preview');
+  assert.equal(await evaluate(() => [...document.querySelectorAll('.template-preview img')].every((image) => image.alt.startsWith('Xem trước mẫu '))), true);
   assert.equal(overlayOpen, true);
   await capture('new-project');
+  await evaluate(() => {
+    const search = document.querySelector('#template-search');
+    search.value = 'luan van';
+    search.dispatchEvent(new Event('input'));
+  });
+  assert.equal(await evaluate(() => document.querySelectorAll('.template-option:not([hidden])').length), 1);
+  assert.equal(await evaluate(() => document.querySelector('input[name="project-template"]:checked').value), 'thesis-vi');
+  assert.match(await evaluate(() => document.querySelector('#template-note').textContent), /XeLaTeX/);
+  await evaluate(() => {
+    const search = document.querySelector('#template-search');
+    search.value = 'no-such-template';
+    search.dispatchEvent(new Event('input'));
+  });
+  assert.equal(await evaluate(() => document.querySelector('#template-empty').hidden), false);
+  assert.equal(await evaluate(() => document.querySelector('#create-confirm').disabled), true);
+  await evaluate(() => {
+    const search = document.querySelector('#template-search');
+    search.value = '';
+    search.dispatchEvent(new Event('input'));
+    const category = document.querySelector('#template-category');
+    category.value = 'Hồ sơ';
+    category.dispatchEvent(new Event('change'));
+  });
+  assert.equal(await evaluate(() => document.querySelector('input[name="project-template"]:checked').value), 'cv-vi');
+  await evaluate(() => {
+    const category = document.querySelector('#template-category');
+    category.value = '';
+    category.dispatchEvent(new Event('change'));
+  });
   await evaluate(() => {
     document.querySelector('#new-project-name').value = 'Báo cáo thử nghiệm';
     document.querySelector('input[value="report"]').checked = true;
@@ -235,7 +270,7 @@ async function run() {
     await waitForPage(() => !document.querySelector('#open-project').disabled, 'folder button restored');
   }
   await click('#new-project');
-  await waitForPage(() => document.querySelector('#new-dialog').open && document.querySelectorAll('.template-option').length === 4, 'repeat new project');
+  await waitForPage(() => document.querySelector('#new-dialog').open && document.querySelectorAll('.template-option').length === 7, 'repeat new project');
   await evaluate(() => {
     document.querySelector('#new-project-name').value = 'Báo cáo thử nghiệm';
     document.querySelector('#new-project-form').requestSubmit();
@@ -252,6 +287,20 @@ async function run() {
   window.setSize(960, 640);
   // Windows display scaling can round the offscreen viewport by one CSS pixel.
   await waitForPage(() => Math.abs(window.innerWidth - 960) <= 2 && document.querySelectorAll('.project-tab').length === 7, 'compact toolbar');
+  await click('#new-project');
+  await waitForPage(() => document.querySelector('#new-dialog').open && document.querySelectorAll('.template-option').length === 7, 'compact template library');
+  assert.equal(await evaluate(() => {
+    const dialog = document.querySelector('#new-dialog');
+    const rect = dialog.getBoundingClientRect();
+    const button = document.querySelector('#create-confirm').getBoundingClientRect();
+    const cards = document.querySelector('#template-options').getBoundingClientRect();
+    const note = document.querySelector('#template-note').getBoundingClientRect();
+    const preview = document.querySelector('.template-preview').getBoundingClientRect();
+    return rect.top >= 0 && rect.bottom <= window.innerHeight && dialog.scrollWidth <= dialog.clientWidth && button.bottom <= rect.bottom && cards.bottom <= note.top && preview.width >= 100 && preview.height >= 90;
+  }), true, 'template library must fit a small window');
+  await capture('templates-small-window');
+  await click('#create-cancel');
+  await waitFor(() => !overlayOpen, 'close compact templates');
   assert.equal(await evaluate(() => {
     const end = document.querySelector('.status').getBoundingClientRect().right;
     return end <= window.innerWidth - 139;

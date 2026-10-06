@@ -1,6 +1,8 @@
 node_modules/
 runtime/
 user-data/
+tmp/
+latex-editor-desktop/User/
 reference-sync-data/
 *.log
 *.aux

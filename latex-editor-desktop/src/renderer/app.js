@@ -9,6 +9,40 @@ let runtimeStatus;
 let recentProjects = [];
 let creatingProject = false;
 let recentRequest = 0;
+let projectTemplates = [];
+
+const normalizeTemplateSearch = (value) => String(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd').toLowerCase();
+
+function updateTemplateNote() {
+  const selected = document.querySelector('input[name="project-template"]:checked')?.value;
+  const template = projectTemplates.find((item) => item.id === selected);
+  document.querySelector('#create-confirm').disabled = creatingProject || !template;
+  const note = document.querySelector('#template-note');
+  if (!template) { note.textContent = ''; return; }
+  const engine = template.engine === 'xelatex' ? 'XeLaTeX' : 'pdfLaTeX';
+  const missing = runtimeStatus && !runtimeStatus.tools.some((tool) => tool.name === template.engine && tool.available && tool.usable !== false);
+  note.textContent = `${template.name} · ${engine}. ` + (missing
+    ? `Chưa tìm thấy ${engine} trên máy. Bạn vẫn có thể tạo project, nhưng cần cài compiler này để build.`
+    : (template.engine === 'xelatex' ? 'Hỗ trợ tiếng Việt, dùng font Latin Modern đi kèm bộ TeX. ' : '') + 'Lần build đầu có thể cần tải thêm gói LaTeX.');
+}
+
+function filterTemplates() {
+  const query = normalizeTemplateSearch(document.querySelector('#template-search').value.trim());
+  const category = document.querySelector('#template-category').value;
+  const visible = [];
+  for (const card of document.querySelectorAll('.template-option')) {
+    const template = projectTemplates.find((item) => item.id === card.querySelector('input').value);
+    card.hidden = Boolean(category && template.category !== category) || !normalizeTemplateSearch(`${template.name} ${template.description} ${template.language} ${template.engine}`).includes(query);
+    if (!card.hidden) visible.push(card.querySelector('input'));
+  }
+  if (!visible.some((radio) => radio.checked)) {
+    for (const radio of document.querySelectorAll('input[name="project-template"]')) radio.checked = false;
+    if (visible.length) visible[0].checked = true;
+  }
+  document.querySelector('#template-count').textContent = `${visible.length} / ${projectTemplates.length} mẫu`;
+  document.querySelector('#template-empty').hidden = visible.length > 0;
+  updateTemplateNote();
+}
 
 async function refreshRecentProjects() {
   const request = ++recentRequest;
@@ -96,27 +130,48 @@ function renderProjectList(container, projects, errorSelector) {
 }
 
 async function loadTemplates() {
-  const templates = await api.listTemplates();
+  projectTemplates = await api.listTemplates();
+  document.querySelector('#template-search').value = '';
+  const categories = document.querySelector('#template-category');
+  categories.replaceChildren(new Option('Tất cả', ''));
+  for (const category of new Set(projectTemplates.map((item) => item.category))) categories.add(new Option(category, category));
   const container = document.querySelector('#template-options');
   container.replaceChildren();
-  for (const [index, template] of templates.entries()) {
+  for (const [index, template] of projectTemplates.entries()) {
     const label = document.createElement('label');
     label.className = 'template-option';
+    const preview = document.createElement('span');
+    preview.className = 'template-preview';
+    const image = document.createElement('img');
+    image.src = new URL(`../../resources/templates/${encodeURIComponent(template.id)}/preview.png`, window.location.href).href;
+    image.alt = `Xem trước mẫu ${template.name}`;
+    image.loading = 'lazy';
+    image.decoding = 'async';
+    preview.append(image);
     const radio = document.createElement('input');
     radio.type = 'radio';
     radio.name = 'project-template';
     radio.value = template.id;
     radio.checked = index === 0;
     const content = document.createElement('span');
+    content.className = 'template-content';
     const name = document.createElement('strong');
     name.textContent = template.name;
     const description = document.createElement('small');
     description.textContent = template.description;
-    content.append(name, description);
-    label.append(radio, content);
+    const metadata = document.createElement('small');
+    metadata.className = 'template-metadata';
+    metadata.textContent = `${template.language} · ${template.engine === 'xelatex' ? 'XeLaTeX' : 'pdfLaTeX'}`;
+    content.append(name, description, metadata);
+    radio.addEventListener('change', updateTemplateNote);
+    label.append(preview, radio, content);
     container.append(label);
   }
+  filterTemplates();
 }
+
+document.querySelector('#template-search').addEventListener('input', filterTemplates);
+document.querySelector('#template-category').addEventListener('change', filterTemplates);
 
 function samePath(left, right) {
   return String(left || '').toLowerCase() === String(right || '').toLowerCase();
@@ -187,6 +242,8 @@ async function inspectRuntime() {
 document.querySelector('#new-project').addEventListener('click', async () => {
   errorBox.textContent = '';
   nameInput.value = '';
+  document.querySelector('#create-confirm').disabled = true;
+  document.querySelector('#template-options').replaceChildren();
   try {
     await api.hideEditor();
     newDialog.showModal();
@@ -231,7 +288,7 @@ document.querySelector('#new-project-form').addEventListener('submit', async (ev
   } catch (error) { errorBox.textContent = error.message; }
   finally {
     creatingProject = false;
-    button.disabled = false;
+    updateTemplateNote();
     cancel.disabled = false;
     button.textContent = 'Tạo project';
   }

@@ -11,15 +11,20 @@ class LatexRuntimeManager {
   }
 
   getStatus() {
+    this.supportPaths = this.#findSupportPaths();
     const tools = ['latexmk', 'pdflatex', 'xelatex'].map((name) => this.#find(name));
     const available = tools.filter((tool) => tool.available);
     const distribution = this.#distribution(available);
-    const canBuild = tools.some((tool) => ['latexmk', 'pdflatex'].includes(tool.name) && tool.usable);
+    const canBuild = tools.some((tool) => ['latexmk', 'pdflatex', 'xelatex'].includes(tool.name) && tool.usable);
     return {
       available: available.length > 0,
       canBuild,
       distribution,
       tools,
+      pathEntries: [...new Set([
+        ...available.map((tool) => path.dirname(tool.path)),
+        ...this.supportPaths
+      ])],
       recommendation: canBuild
         ? null
         : available.length > 0
@@ -58,7 +63,7 @@ class LatexRuntimeManager {
       windowsHide: true,
       env: {
         ...this.env,
-        PATH: [path.dirname(executablePath), this.env.PATH].filter(Boolean).join(path.delimiter)
+        PATH: [path.dirname(executablePath), ...(this.supportPaths || []), this.env.PATH].filter(Boolean).join(path.delimiter)
       }
     });
     if (probe.status === 0) {
@@ -76,6 +81,20 @@ class LatexRuntimeManager {
     if (paths.some((value) => value.includes('miktex'))) return 'MiKTeX';
     if (paths.some((value) => value.includes('texlive'))) return 'TeX Live';
     return tools.length ? 'LaTeX (PATH)' : null;
+  }
+
+  #findSupportPaths() {
+    if (this.platform !== 'win32') return [];
+    const result = this.spawnSync('where.exe', ['perl.exe'], { encoding: 'utf8', windowsHide: true });
+    const fromPath = result.status === 0
+      ? String(result.stdout).split(/\r?\n/).filter(Boolean).map((file) => path.dirname(file.trim()))
+      : [];
+    const candidates = [
+      ...fromPath,
+      path.join(this.env.ProgramFiles || 'C:\\Program Files', 'Git', 'usr', 'bin'),
+      path.join(this.env.LOCALAPPDATA || '', 'Programs', 'Git', 'usr', 'bin')
+    ];
+    return [...new Set(candidates.filter((directory) => this.fs.existsSync(path.join(directory, 'perl.exe'))))];
   }
 }
 

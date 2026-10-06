@@ -1,0 +1,29 @@
+% !TeX program = xelatex
+\documentclass[12pt,a4paper]{report}
+\usepackage{fontspec}
+\setmainfont{Latin Modern Roman}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage[unicode,colorlinks=true,linkcolor=blue,urlcolor=blue]{hyperref}
+\renewcommand{\contentsname}{Mục lục}
+\renewcommand{\chaptername}{Chương}
+\renewcommand{\figurename}{Hình}
+\renewcommand{\tablename}{Bảng}
+\title{BÁO CÁO ĐỒ ÁN\\[1cm]\Large Tên đề tài của bạn}
+\author{Họ và tên sinh viên\\Mã sinh viên: 000000\\Giảng viên hướng dẫn: Họ và tên}
+\date{Năm 2026}
+\begin{document}
+\maketitle
+\tableofcontents
+\input{chapters/introduction}
+\chapter{Phương pháp và kết quả}
+Trình bày phương pháp, dữ liệu và kết quả thực hiện.
+\section{Ví dụ công thức}
+Năng lượng được biểu diễn bằng công thức:
+\[
+E = mc^2.
+\]
+\section{Kết luận}
+Tóm tắt kết quả đạt được và hướng phát triển tiếp theo.
+\end{document}

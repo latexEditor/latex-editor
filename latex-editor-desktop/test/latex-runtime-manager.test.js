@@ -44,6 +44,29 @@ test('marks latexmk unusable without Perl and falls back to pdflatex', () => {
   assert.match(latexmk.reason, /Perl/);
 });
 
+test('uses the Perl bundled with Git to make MiKTeX latexmk usable', () => {
+  const gitPerl = 'C:\\Program Files\\Git\\usr\\bin\\perl.exe';
+  const manager = new LatexRuntimeManager({
+    platform: 'win32',
+    spawnSync: (command, [argument], options = {}) => {
+      if (command === 'where.exe' && argument === 'latexmk.exe') {
+        return { status: 0, stdout: 'C:\\MiKTeX\\latexmk.exe\r\n' };
+      }
+      if (command.endsWith('latexmk.exe') && argument === '--version') {
+        return options.env.PATH.includes('Git\\usr\\bin')
+          ? { status: 0, stdout: 'Latexmk' }
+          : { status: 1, stdout: '', stderr: 'perl missing' };
+      }
+      return { status: 1, stdout: '' };
+    },
+    fs: { existsSync: (file) => file === gitPerl },
+    env: { ProgramFiles: 'C:\\Program Files', PATH: '' }
+  });
+  const status = manager.getStatus();
+  assert.equal(status.tools.find((tool) => tool.name === 'latexmk').usable, true);
+  assert.equal(status.pathEntries.includes('C:\\Program Files\\Git\\usr\\bin'), true);
+});
+
 test('returns installation guidance when compiler is absent', () => {
   const manager = new LatexRuntimeManager({
     platform: 'linux', spawnSync: () => ({ status: 1, stdout: '' }),

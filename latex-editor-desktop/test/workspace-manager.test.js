@@ -46,6 +46,32 @@ test('migrates an app-managed latexmk recipe when latexmk is unusable', (t) => {
   assert.equal(settings['latex-workshop.latex.tools'][0].command, 'pdflatex');
 });
 
+test('detects XeLaTeX projects and replaces an app-managed pdfLaTeX recipe', (t) => {
+  const manager = fixture(t);
+  manager.runtimeStatus = { tools: [{ name: 'latexmk', available: true, usable: true }] };
+  const project = manager.createProject('Imported XeLaTeX project');
+  const settingsFile = path.join(project.path, '.vscode', 'settings.json');
+  const original = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+  assert.equal(original['latex-workshop.latex.recipes'][0].name, 'latexmk');
+  assert.equal(original['latex-workshop.latex.tools'][0].args.includes('-pdf'), true);
+
+  fs.writeFileSync(path.join(project.path, 'main.tex'), [
+    '% !TeX program = xelatex',
+    '\\documentclass{article}',
+    '\\usepackage{fontspec}',
+    '\\begin{document}Xin chÃ o\\end{document}'
+  ].join('\n'));
+  fs.writeFileSync(path.join(project.path, 'latexmkrc'), '$pdf_mode = 5;\n');
+  manager.openProject(project.path);
+
+  const migrated = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+  assert.equal(migrated['latex-workshop.latex.recipes'][0].name, 'latexmk-xelatex');
+  assert.deepEqual(migrated['latex-workshop.latex.recipes'][0].tools, ['latexmk-xelatex']);
+  assert.equal(migrated['latex-workshop.latex.tools'][0].command, 'latexmk');
+  assert.equal(migrated['latex-workshop.latex.tools'][0].args.includes('-xelatex'), true);
+  assert.equal(migrated['latex-workshop.latex.tools'][0].args.includes('-pdf'), false);
+});
+
 test('keeps multiple projects open in creation order without duplicating switched tabs', (t) => {
   const manager = fixture(t);
   const duong = manager.createProject('duong');
@@ -94,7 +120,7 @@ test('creates an encoded code-server URL for Unicode Windows paths', (t) => {
 test('creates each bundled template and copies nested chapter files', (t) => {
   const manager = fixture(t);
   manager.templateDir = path.resolve(__dirname, '../resources/templates/basic-article');
-  assert.equal(manager.listTemplates().length, 4);
+  assert.equal(manager.listTemplates().length, 7);
   for (const template of manager.listTemplates()) {
     const project = manager.createProject(`Tài liệu ${template.id}`, template.id);
     assert.equal(project.hasMainTex, true);
@@ -102,6 +128,29 @@ test('creates each bundled template and copies nested chapter files', (t) => {
     if (template.id === 'report') {
       assert.equal(fs.existsSync(path.join(project.path, 'chapters', 'introduction.tex')), true);
     }
+  }
+});
+
+test('Vietnamese templates use XeLaTeX and upgrade to latexmk when it becomes available', (t) => {
+  const manager = fixture(t);
+  manager.templateDir = path.resolve(__dirname, '../resources/templates/basic-article');
+  for (const id of ['report-vi', 'thesis-vi', 'cv-vi']) {
+    manager.runtimeStatus = null;
+    const project = manager.createProject(id, id);
+    const settingsFile = path.join(project.path, '.vscode', 'settings.json');
+    const initial = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+    assert.equal(initial['latex-workshop.latex.tools'][0].command, 'xelatex');
+    assert.deepEqual(initial['latex-workshop.latex.recipes'][0].tools, ['xelatex', 'xelatex']);
+    manager.runtimeStatus = { tools: [{ name: 'latexmk', available: true, usable: true }] };
+    manager.openProject(project.path);
+    const upgraded = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+    assert.equal(upgraded['latex-workshop.latex.recipes'][0].name, 'latexmk-xelatex');
+    assert.equal(upgraded['latex-workshop.latex.tools'][0].command, 'latexmk');
+    assert.equal(upgraded['latex-workshop.latex.tools'][0].args.includes('-xelatex'), true);
+    const edited = { ...upgraded, 'latex-workshop.latex.recipes': [{ name: 'My compiler', tools: ['custom'] }] };
+    fs.writeFileSync(settingsFile, JSON.stringify(edited));
+    manager.openProject(project.path);
+    assert.deepEqual(JSON.parse(fs.readFileSync(settingsFile, 'utf8')), edited);
   }
 });
 

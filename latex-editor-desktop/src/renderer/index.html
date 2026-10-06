@@ -53,17 +53,23 @@
     </div>
   </main>
 
-  <dialog id="new-dialog">
+  <dialog id="new-dialog" aria-labelledby="new-project-title">
     <form id="new-project-form" method="dialog">
-      <h2>Tạo project mới</h2>
+      <h2 id="new-project-title">Tạo project mới</h2>
       <p>Chọn mẫu để bắt đầu tài liệu của bạn.</p>
       <label for="new-project-name">Tên project</label>
       <input id="new-project-name" maxlength="100" placeholder="Ví dụ: Báo cáo tốt nghiệp" autocomplete="off">
-      <fieldset class="template-fieldset">
-        <legend>Mẫu tài liệu</legend>
+      <section class="template-fieldset" aria-labelledby="template-library-label">
+        <h3 id="template-library-label">Mẫu tài liệu</h3>
+        <div class="template-filters">
+          <div><label for="template-search">Tìm mẫu</label><input id="template-search" type="search" placeholder="Tên mẫu, ngôn ngữ…" autocomplete="off"></div>
+          <div><label for="template-category">Loại tài liệu</label><select id="template-category"><option value="">Tất cả</option></select></div>
+        </div>
+        <p id="template-count" aria-live="polite"></p>
         <div id="template-options" class="template-options"></div>
-      </fieldset>
-      <p class="template-note">Nội dung mẫu dùng tiếng Anh. MiKTeX có thể cần cài thêm gói khi build mẫu slide lần đầu.</p>
+        <p id="template-empty" hidden>Không tìm thấy mẫu phù hợp. Hãy thử từ khóa hoặc loại tài liệu khác.</p>
+      </section>
+      <p id="template-note" class="template-note" aria-live="polite"></p>
       <div class="storage-location"><span>Thư mục lưu project mới</span><code id="new-project-location"></code></div>
       <div id="dialog-error" class="error" aria-live="polite"></div>
       <div class="dialog-actions">
