@@ -33,6 +33,39 @@ test('writes a pdflatex fallback recipe when latexmk is unavailable', (t) => {
   const project = manager.createProject('Fallback compiler');
   const settings = JSON.parse(fs.readFileSync(path.join(project.path, '.vscode', 'settings.json'), 'utf8'));
   assert.equal(settings['latex-workshop.latex.recipes'][0].name, 'pdflatex');
+  assert.equal(settings['latex-workshop.view.pdf.internal.synctex.keybinding'], 'double-click');
+});
+
+test('adds inverse SyncTeX defaults without replacing custom compiler settings', (t) => {
+  const manager = fixture(t);
+  const project = manager.createProject('Custom compiler');
+  const settingsFile = path.join(project.path, '.vscode', 'settings.json');
+  const custom = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+  custom['latex-workshop.latex.recipes'] = [{ name: 'My compiler', tools: ['custom'] }];
+  custom['latex-workshop.latex.tools'] = [{ name: 'custom', command: 'custom-latex', args: [] }];
+  delete custom['latex-workshop.view.pdf.internal.synctex.keybinding'];
+  fs.writeFileSync(settingsFile, JSON.stringify(custom));
+
+  manager.openProject(project.path);
+
+  const migrated = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+  assert.deepEqual(migrated['latex-workshop.latex.recipes'], custom['latex-workshop.latex.recipes']);
+  assert.deepEqual(migrated['latex-workshop.latex.tools'], custom['latex-workshop.latex.tools']);
+  assert.equal(migrated['latex-workshop.view.pdf.internal.synctex.keybinding'], 'double-click');
+});
+
+test('preserves an explicitly configured inverse SyncTeX gesture', (t) => {
+  const manager = fixture(t);
+  const project = manager.createProject('Custom SyncTeX');
+  const settingsFile = path.join(project.path, '.vscode', 'settings.json');
+  const settings = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+  settings['latex-workshop.view.pdf.internal.synctex.keybinding'] = 'ctrl-click';
+  fs.writeFileSync(settingsFile, JSON.stringify(settings));
+
+  manager.openProject(project.path);
+
+  const preserved = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+  assert.equal(preserved['latex-workshop.view.pdf.internal.synctex.keybinding'], 'ctrl-click');
 });
 
 test('migrates an app-managed latexmk recipe when latexmk is unusable', (t) => {

@@ -249,6 +249,7 @@ class WorkspaceManager {
       'latex-workshop.latex.tools': [profile.tool],
       'latex-workshop.view.pdf.viewer': 'tab',
       'latex-workshop.view.pdf.tab.editorGroup': 'right',
+      'latex-workshop.view.pdf.internal.synctex.keybinding': 'double-click',
       'latex-workshop.synctex.afterBuild.enabled': true,
       'files.exclude': { '**/*.aux': true, '**/*.fls': true, '**/*.fdb_latexmk': true }
     };
@@ -273,12 +274,21 @@ class WorkspaceManager {
           && JSON.stringify(recipe[0]?.tools) === JSON.stringify(profile.recipeTools)
           && currentTools?.[0]?.name === profile.tool.name
           && currentTools[0]?.command === profile.tool.command;
-        if (!managed || alreadyCurrent) return;
-        const migrated = {
-          ...current,
-          'latex-workshop.latex.recipes': settings['latex-workshop.latex.recipes'],
-          'latex-workshop.latex.tools': settings['latex-workshop.latex.tools']
-        };
+        let migrated = current;
+        if (current['latex-workshop.view.pdf.internal.synctex.keybinding'] === undefined) {
+          migrated = {
+            ...migrated,
+            'latex-workshop.view.pdf.internal.synctex.keybinding': 'double-click'
+          };
+        }
+        if (managed && !alreadyCurrent) {
+          migrated = {
+            ...migrated,
+            'latex-workshop.latex.recipes': settings['latex-workshop.latex.recipes'],
+            'latex-workshop.latex.tools': settings['latex-workshop.latex.tools']
+          };
+        }
+        if (migrated === current) return;
         this.fs.writeFileSync(settingsPath, `${JSON.stringify(migrated, null, 2)}\n`, 'utf8');
         return;
       } catch (error) {

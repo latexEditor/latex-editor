@@ -22,9 +22,10 @@
     <button id="new-project" class="toolbar-button primary"><span>＋</span> Project mới</button>
     <button id="recent-projects" class="toolbar-button" title="Mở lại project gần đây">Gần đây</button>
     <button id="history-button" class="toolbar-button feature-button" title="Lịch sử phiên bản" aria-label="Lịch sử phiên bản" disabled><span>↶</span><span class="feature-label">Lịch sử</span></button>
+    <button id="share-button" class="toolbar-button feature-button" title="Chia sẻ và thành viên" aria-label="Chia sẻ và thành viên" disabled><span>👥</span><span class="feature-label">Chia sẻ</span></button>
 
     <div class="spacer"></div>
-    <button id="account-button" class="toolbar-button feature-button" title="Tài khoản và đồng bộ cloud" aria-label="Tài khoản và đồng bộ cloud"><span>☁</span><span id="account-label" class="feature-label">Tài khoản</span></button>
+    <button id="account-button" class="toolbar-button feature-button" title="Tài khoản và đồng bộ cloud" aria-label="Tài khoản và đồng bộ cloud"><span>☁</span><span id="account-label" class="feature-label">Tài khoản</span><span id="account-badge" class="account-badge" hidden>0</span></button>
 
     <button id="runtime-details" class="runtime-button" title="Xem trạng thái LaTeX runtime">
       <span id="runtime-dot" class="dot checking"></span>
@@ -135,10 +136,87 @@
         <button id="cloud-upload" type="button">Đồng bộ project đang mở</button>
         <button id="cloud-refresh" type="button">Làm mới danh sách</button>
       </div>
+      <div id="pending-my-invitations" class="my-invitations-card" hidden>
+        <div class="my-invitations-header">
+          <h3>📬 Lời mời tham gia dự án (<span id="my-invitations-count">0</span>)</h3>
+        </div>
+        <p class="feature-note">Bạn được mời cộng tác trong các project sau:</p>
+        <div id="my-invitations-list" class="my-invitations-list"></div>
+      </div>
+      <div class="join-invite-card">
+        <label for="join-invite-input">Tham gia project qua mã hoặc link mời</label>
+        <form id="join-invite-form" class="join-invite-form">
+          <input id="join-invite-input" placeholder="Dán ID hoặc link lời mời…" autocomplete="off" required>
+          <button id="join-invite-submit" type="submit" class="primary">Tham gia</button>
+        </form>
+      </div>
       <div id="cloud-projects" class="recent-list"></div>
     </section>
     <div id="account-feedback" class="feature-feedback" role="status"></div>
     <div class="dialog-actions"><button id="account-close" type="button">Đóng</button></div>
+  </dialog>
+
+  <dialog id="share-dialog" aria-labelledby="share-title">
+    <h2 id="share-title">Chia sẻ &amp; Nhóm</h2>
+    <p id="share-project-name" class="share-subtitle"></p>
+    
+    <div id="share-unsynced-banner" class="share-banner" hidden>
+      <p id="share-unsynced-text">Project này chưa được đồng bộ lên cloud. Hãy đồng bộ để mời thành viên và phân quyền.</p>
+      <button id="share-sync-now" type="button" class="primary">Đồng bộ ngay</button>
+      <button id="share-open-account" type="button" class="primary" hidden>Xem lời mời trong Tài khoản &amp; Cloud</button>
+    </div>
+
+    <div id="share-main" class="share-main" hidden>
+      <div class="share-my-role-bar">
+        <span>Vai trò của bạn:</span>
+        <strong id="share-my-role" class="role-badge">Chủ sở hữu</strong>
+      </div>
+
+      <section id="share-invite-section" class="share-section">
+        <h3>Mời thành viên mới</h3>
+        <div class="invite-panels">
+          <form id="share-email-form" class="share-email-form">
+            <label for="share-invite-email" class="visually-hidden">Email</label>
+            <input id="share-invite-email" type="email" placeholder="Email người nhận…" autocomplete="off" required>
+            <select id="share-invite-role">
+              <option value="editor">Người chỉnh sửa (Editor)</option>
+              <option value="viewer">Người xem (Viewer)</option>
+            </select>
+            <button id="share-email-submit" type="submit" class="primary">Mời</button>
+          </form>
+
+          <div class="share-link-group">
+            <div class="share-link-actions">
+              <select id="share-link-role">
+                <option value="editor">Link chỉnh sửa (Editor)</option>
+                <option value="viewer">Link xem (Viewer)</option>
+              </select>
+              <button id="share-create-link" type="button">Tạo link mời</button>
+            </div>
+            <div id="share-link-result" class="share-link-result" hidden>
+              <input id="share-link-input" readonly>
+              <button id="share-copy-link" type="button" class="primary">Sao chép</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="share-section">
+        <h3>Thành viên (<span id="share-members-count">0</span>)</h3>
+        <div id="share-members-list" class="members-list"></div>
+      </section>
+
+      <section id="share-pending-section" class="share-section" hidden>
+        <h3>Lời mời đang chờ (<span id="share-pending-count">0</span>)</h3>
+        <div id="share-pending-list" class="pending-list"></div>
+      </section>
+    </div>
+
+    <div id="share-feedback" class="feature-feedback" role="status"></div>
+    <div class="dialog-actions">
+      <button id="share-refresh" type="button">Làm mới</button>
+      <button id="share-close" type="button" class="primary">Đóng</button>
+    </div>
   </dialog>
   <script src="app.js"></script>
   <script src="features.js"></script>

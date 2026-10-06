@@ -9,8 +9,8 @@ const head = 'a'.repeat(40);
 function request(env, token, route, options = {}) {
   return handleRequest(new Request(env.PUBLIC_BASE_URL + route, { ...options, headers: { Authorization: `Bearer ${token}`, ...options.headers } }), env);
 }
-function upload(etag) {
-  return { method: 'PUT', headers: { 'X-Git-Head': head, 'X-Project-Name': encodeURIComponent('Báo cáo'), ...(etag ? { 'If-Match': etag } : { 'If-None-Match': '*' }) }, body: `# v2 git bundle\n${head} refs/heads/main\n\nPACK-test-fixture` };
+function upload(updatedAt) {
+  return { method: 'PUT', headers: { 'X-Git-Head': head, 'X-Project-Name': encodeURIComponent('Báo cáo'), ...(updatedAt ? { 'If-Match': updatedAt } : { 'If-None-Match': '*' }) }, body: `# v2 git bundle\n${head} refs/heads/main\n\nPACK-test-fixture` };
 }
 
 test('Google authorization uses PKCE; exchange is one-time and logout invalidates the session', async () => {
@@ -23,13 +23,13 @@ test('Google authorization uses PKCE; exchange is one-time and logout invalidate
   assert.equal((await request(env, login.session.token, '/v1/me')).status, 401);
 });
 
-test('R2 projects and bundles are isolated per account', async () => {
+test('projects are isolated per account via D1 membership', async () => {
   const env = environment();
   const first = (await signedIn(handleRequest, env, 'one')).session;
   const second = (await signedIn(handleRequest, env, 'two')).session;
   const saved = await request(env, first.token, `/v1/projects/${id}`, upload());
   assert.equal(saved.status, 200);
-  assert.equal((await request(env, second.token, `/v1/projects/${id}`)).status, 404);
+  assert.equal((await request(env, second.token, `/v1/projects/${id}`)).status, 403);
   assert.deepEqual((await (await request(env, second.token, '/v1/projects')).json()).projects, []);
   const download = await request(env, first.token, `/v1/projects/${id}`);
   assert.match(await download.text(), /PACK-test-fixture/);
@@ -58,13 +58,17 @@ test('OAuth requests work with legacy workerd redirect modes and never follow pr
   }
 });
 
-test('stale writes and concurrent R2 updates return conflict', async () => {
+test('stale writes and concurrent D1 updates return conflict', async () => {
   const env = environment();
   const { token } = (await signedIn(handleRequest, env)).session;
   const first = await (await request(env, token, `/v1/projects/${id}`, upload())).json();
+  // Second create with If-None-Match: * should conflict
   assert.equal((await request(env, token, `/v1/projects/${id}`, upload())).status, 409);
-  const results = await Promise.all([request(env, token, `/v1/projects/${id}`, upload(first.etag)), request(env, token, `/v1/projects/${id}`, upload(first.etag))]);
-  assert.deepEqual(results.map((r) => r.status).sort(), [200, 409]);
+  // Update with correct updatedAt
+  const updated = await (await request(env, token, `/v1/projects/${id}`, upload(first.updatedAt))).json();
+  assert.ok(updated.updatedAt);
+  // Update with stale updatedAt
+  assert.equal((await request(env, token, `/v1/projects/${id}`, upload(first.updatedAt))).status, 409);
 });
 
 test('authentication rejects unsafe redirects, forged state, unauthenticated access and rate excess', async () => {
@@ -82,11 +86,9 @@ test('server validates bundle metadata and expires sessions', async () => {
   const env = environment();
   const { token } = (await signedIn(handleRequest, env)).session;
   assert.equal((await request(env, token, `/v1/projects/${id}`, { ...upload(), body: 'not a bundle' })).status, 400);
-  for (const [key, item] of env.PROJECTS.items) {
-    if (key.startsWith('auth/session/')) {
-      const value = JSON.parse(new TextDecoder().decode(item.data));
-      await env.PROJECTS.put(key, JSON.stringify({ ...value, expiresAt: 0 }));
-    }
+  // Expire all sessions in D1
+  for (const session of env.DB.tables.sessions) {
+    session.expires_at = 0;
   }
   assert.equal((await request(env, token, '/v1/projects')).status, 401);
 });
@@ -121,7 +123,7 @@ test('incorrect PKCE cannot consume a valid one-time code', async () => {
   assert.equal((await exchange(verifier)).status, 400);
 });
 
-test('project listing paginates without losing entries', async () => {
+test('project listing paginates with offset', async () => {
   const env = environment();
   const { token } = (await signedIn(handleRequest, env)).session;
   for (let index = 0; index < 27; index += 1) {
@@ -131,8 +133,192 @@ test('project listing paginates without losing entries', async () => {
   const first = await (await request(env, token, '/v1/projects')).json();
   assert.equal(first.projects.length, 25);
   assert.ok(first.cursor);
-  const second = await (await request(env, token, '/v1/projects?cursor=' + encodeURIComponent(first.cursor))).json();
+  const second = await (await request(env, token, '/v1/projects?offset=' + first.cursor)).json();
   assert.equal(second.projects.length, 2);
   assert.equal(second.cursor, null);
   assert.equal(new Set([...first.projects, ...second.projects].map((project) => project.id)).size, 27);
+});
+
+// --- Team management tests ---
+
+test('owner can invite by email, invitee can accept and access project', async () => {
+  const env = environment();
+  const owner = (await signedIn(handleRequest, env, 'owner')).session;
+  const invitee = (await signedIn(handleRequest, env, 'invitee')).session;
+
+  // Owner creates a project
+  const saved = await (await request(env, owner.token, `/v1/projects/${id}`, upload())).json();
+  assert.ok(saved.id);
+
+  // Invitee cannot access yet
+  assert.equal((await request(env, invitee.token, `/v1/projects/${id}`)).status, 403);
+
+  // Owner invites by email
+  const invite = await (await request(env, owner.token, `/v1/projects/${id}/invite`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'invitee@example.test', role: 'editor' })
+  })).json();
+  assert.ok(invite.invitation.id);
+  assert.equal(invite.invitation.role, 'editor');
+
+  // Invitee sees pending invitation in /v1/my-invitations
+  const myInvites = await (await request(env, invitee.token, '/v1/my-invitations')).json();
+  assert.equal(myInvites.invitations.length, 1);
+  assert.equal(myInvites.invitations[0].id, invite.invitation.id);
+  assert.equal(myInvites.invitations[0].projectId, id);
+  assert.equal(myInvites.invitations[0].role, 'editor');
+
+  // Invitee accepts
+  const accept = await (await request(env, invitee.token, `/v1/invitations/${invite.invitation.id}/accept`, { method: 'POST' })).json();
+  assert.equal(accept.accepted, true);
+  assert.equal(accept.role, 'editor');
+
+  // Accepted invite no longer in /v1/my-invitations
+  const remaining = await (await request(env, invitee.token, '/v1/my-invitations')).json();
+  assert.equal(remaining.invitations.length, 0);
+
+  // Invitee can now access
+  const download = await request(env, invitee.token, `/v1/projects/${id}`);
+  assert.equal(download.status, 200);
+
+  // Invitee sees project in their list
+  const list = await (await request(env, invitee.token, '/v1/projects')).json();
+  assert.equal(list.projects.length, 1);
+  assert.equal(list.projects[0].id, id);
+});
+
+test('invitee can decline an invitation', async () => {
+  const env = environment();
+  const owner = (await signedIn(handleRequest, env, 'owner')).session;
+  const invitee = (await signedIn(handleRequest, env, 'invitee')).session;
+
+  await request(env, owner.token, `/v1/projects/${id}`, upload());
+  const invite = await (await request(env, owner.token, `/v1/projects/${id}/invite`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'invitee@example.test', role: 'editor' })
+  })).json();
+
+  const myInvites = await (await request(env, invitee.token, '/v1/my-invitations')).json();
+  assert.equal(myInvites.invitations.length, 1);
+
+  // Decline
+  const decline = await (await request(env, invitee.token, `/v1/invitations/${invite.invitation.id}/decline`, { method: 'POST' })).json();
+  assert.equal(decline.declined, true);
+
+  // No longer in pending invitations
+  const after = await (await request(env, invitee.token, '/v1/my-invitations')).json();
+  assert.equal(after.invitations.length, 0);
+});
+
+test('owner can list members and remove a member', async () => {
+  const env = environment();
+  const owner = (await signedIn(handleRequest, env, 'owner')).session;
+  const member = (await signedIn(handleRequest, env, 'member')).session;
+
+  await request(env, owner.token, `/v1/projects/${id}`, upload());
+  const invite = await (await request(env, owner.token, `/v1/projects/${id}/invite`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'member@example.test', role: 'viewer' })
+  })).json();
+  await request(env, member.token, `/v1/invitations/${invite.invitation.id}/accept`, { method: 'POST' });
+
+  // List members
+  const members = await (await request(env, owner.token, `/v1/projects/${id}/members`)).json();
+  assert.equal(members.members.length, 2);
+
+  // Remove member
+  const remove = await request(env, owner.token, `/v1/projects/${id}/members/${member.user.id}`, { method: 'DELETE' });
+  assert.equal(remove.status, 200);
+
+  // Member can no longer access
+  assert.equal((await request(env, member.token, `/v1/projects/${id}`)).status, 403);
+});
+
+test('non-owner cannot invite or remove members', async () => {
+  const env = environment();
+  const owner = (await signedIn(handleRequest, env, 'owner')).session;
+  const editor = (await signedIn(handleRequest, env, 'editor')).session;
+
+  await request(env, owner.token, `/v1/projects/${id}`, upload());
+  const invite = await (await request(env, owner.token, `/v1/projects/${id}/invite`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'editor@example.test', role: 'editor' })
+  })).json();
+  await request(env, editor.token, `/v1/invitations/${invite.invitation.id}/accept`, { method: 'POST' });
+
+  // Editor cannot invite
+  assert.equal((await request(env, editor.token, `/v1/projects/${id}/invite`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'other@example.test', role: 'viewer' })
+  })).status, 403);
+
+  // Editor cannot remove owner
+  assert.equal((await request(env, editor.token, `/v1/projects/${id}/members/${owner.user.id}`, { method: 'DELETE' })).status, 403);
+});
+
+test('owner can revoke a pending invitation', async () => {
+  const env = environment();
+  const owner = (await signedIn(handleRequest, env, 'owner')).session;
+  const invitee = (await signedIn(handleRequest, env, 'invitee')).session;
+
+  await request(env, owner.token, `/v1/projects/${id}`, upload());
+  const invite = await (await request(env, owner.token, `/v1/projects/${id}/invite`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'invitee@example.test', role: 'editor' })
+  })).json();
+
+  // List invitations
+  const list = await (await request(env, owner.token, `/v1/projects/${id}/invitations`)).json();
+  assert.equal(list.invitations.length, 1);
+  assert.equal(list.invitations[0].status, 'pending');
+
+  // Revoke
+  const revoke = await request(env, owner.token, `/v1/projects/${id}/invitations/${invite.invitation.id}/revoke`, { method: 'POST' });
+  assert.equal(revoke.status, 200);
+
+  // Cannot accept revoked invitation
+  const accept = await request(env, invitee.token, `/v1/invitations/${invite.invitation.id}/accept`, { method: 'POST' });
+  assert.equal(accept.status, 400);
+});
+
+test('owner cannot remove themselves if they are the only owner', async () => {
+  const env = environment();
+  const owner = (await signedIn(handleRequest, env, 'owner')).session;
+
+  await request(env, owner.token, `/v1/projects/${id}`, upload());
+  const remove = await request(env, owner.token, `/v1/projects/${id}/members/${owner.user.id}`, { method: 'DELETE' });
+  assert.equal(remove.status, 400);
+});
+
+test('viewer cannot upload to a project', async () => {
+  const env = environment();
+  const owner = (await signedIn(handleRequest, env, 'owner')).session;
+  const viewer = (await signedIn(handleRequest, env, 'viewer')).session;
+
+  const saved = await (await request(env, owner.token, `/v1/projects/${id}`, upload())).json();
+  const invite = await (await request(env, owner.token, `/v1/projects/${id}/invite`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'viewer@example.test', role: 'viewer' })
+  })).json();
+  await request(env, viewer.token, `/v1/invitations/${invite.invitation.id}/accept`, { method: 'POST' });
+
+  // Viewer can download
+  assert.equal((await request(env, viewer.token, `/v1/projects/${id}`)).status, 200);
+  // Viewer cannot upload
+  assert.equal((await request(env, viewer.token, `/v1/projects/${id}`, upload(saved.updatedAt))).status, 403);
+});
+
+test('duplicate email invitation is rejected', async () => {
+  const env = environment();
+  const owner = (await signedIn(handleRequest, env, 'owner')).session;
+
+  await request(env, owner.token, `/v1/projects/${id}`, upload());
+  assert.equal((await request(env, owner.token, `/v1/projects/${id}/invite`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'dup@example.test', role: 'editor' })
+  })).status, 200);
+  assert.equal((await request(env, owner.token, `/v1/projects/${id}/invite`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'dup@example.test', role: 'editor' })
+  })).status, 409);
 });

@@ -58,10 +58,10 @@ Lịch sử và liên kết cloud gắn với đường dẫn project. Khi tự 
 
 ## Đăng nhập và đồng bộ
 
-Sau khi cấu hình backend, khởi động từ PowerShell:
+Bản ứng dụng dùng Worker đã deploy tại `https://latex-editor-cloud.emsidt.workers.dev`, vì vậy chạy `npm start` là có thể đăng nhập. Khi phát triển với backend khác, ghi đè URL trước khi khởi động:
 
 ```powershell
-$env:LATEX_EDITOR_API_URL = "https://YOUR-WORKER.workers.dev"
+$env:LATEX_EDITOR_API_URL = "http://127.0.0.1:8787"
 npm start
 ```
 

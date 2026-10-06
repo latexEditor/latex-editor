@@ -33,7 +33,15 @@ function registerFeatureIpc({ ipcMain, dialog, workspace, history, auth, cloud, 
       const downloaded = await cloud.download(id);
       await openProject(downloaded.path);
       return downloaded;
-    }
+    },
+    'latex:cloud-get-meta': (_event, value) => cloud.getProjectMeta(project(value)),
+    'latex:cloud-list-members': (_event, value) => cloud.listMembers(project(value)),
+    'latex:cloud-invite': (_event, value, options) => cloud.invite(project(value), options),
+    'latex:cloud-list-invitations': (_event, value) => cloud.listInvitations(project(value)),
+    'latex:cloud-revoke-invitation': (_event, value, invitationId) => cloud.revokeInvitation(project(value), invitationId),
+    'latex:cloud-accept-invitation': (_event, invitationId, token) => cloud.acceptInvitation(invitationId, token),
+    'latex:cloud-my-invitations': () => cloud.myInvitations(),
+    'latex:cloud-decline-invitation': (_event, invitationId) => cloud.declineInvitation(invitationId)
   };
   for (const [channel, handler] of Object.entries(handlers)) {
     ipcMain.removeHandler(channel);

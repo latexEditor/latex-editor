@@ -13,8 +13,17 @@ function normalizeApiUrl(value) {
   return url.origin;
 }
 
+let defaultFetcher = global.fetch;
+try {
+  const { Agent } = require('undici');
+  const agent = new Agent({ connect: { timeout: 30000 } });
+  defaultFetcher = (url, options = {}) => global.fetch(url, { dispatcher: agent, ...options });
+} catch {
+  // Use global.fetch as fallback
+}
+
 class AuthManager {
-  constructor(config, { safeStorage, openExternal, fetch: fetcher = global.fetch, onChange = () => {} }) {
+  constructor(config, { safeStorage, openExternal, fetch: fetcher = defaultFetcher, onChange = () => {} }) {
     this.apiUrl = normalizeApiUrl(config.apiUrl);
     this.sessionFile = config.sessionFile;
     this.storage = safeStorage;
@@ -123,7 +132,7 @@ class AuthManager {
           const result = await this.fetch(this.apiUrl + '/auth/exchange', {
             method: 'POST', redirect: 'error', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ code, verifier }),
-            signal: AbortSignal.any([this.controller.signal, AbortSignal.timeout(15000)])
+            signal: AbortSignal.any([this.controller.signal, AbortSignal.timeout(30000)])
           });
           if (!result.ok) throw new Error('Không thể hoàn tất đăng nhập Google. Hãy thử lại.');
           const session = await result.json();

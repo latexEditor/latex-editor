@@ -10,10 +10,15 @@
 
 ## Đợt 2 — Project dùng chung
 
-- [ ] Project ID dùng chung, migration dữ liệu cloud hiện đang nằm dưới từng tài khoản.
-- [ ] D1 lưu project, thành viên, lời mời và quyền owner/editor/viewer.
-- [ ] Mời qua email/link, chấp nhận lời mời, thu hồi quyền và project được chia sẻ.
-- [ ] Kiểm tra quyền phía server cho mọi thao tác; kiểm thử bằng hai tài khoản.
+- [x] D1 lưu user, session, project manifest, thành viên và lời mời; R2 chỉ lưu Git bundle và auth state tạm.
+- [x] Bảng `project_members` với quyền owner/editor/viewer; kiểm tra quyền phía server cho mọi thao tác.
+- [x] API mời qua email, chấp nhận lời mời, thu hồi lời mời, xóa thành viên.
+- [x] Test bao gồm: cô lập project theo tài khoản, mời/chấp nhận/thu hồi, quyền viewer/editor/owner, ngăn xóa owner cuối.
+- [x] Project ID dùng chung (chuyển sang bảng `projects` toàn cục kết hợp `project_members`, R2 bundle key dạng `bundles/:projectId/:uuid.bundle`).
+- [x] Mời qua link (hỗ trợ cả API backend và UI desktop tạo/sao chép/nhập mã tham gia).
+- [x] Giao diện desktop cho chia sẻ project và quản lý thành viên (hộp thoại Chia sẻ, danh sách thành viên kèm role badge, mời qua email/link, thu hồi và xóa thành viên).
+- [x] Môi trường Worker & D1 thật đã được tạo và deploy trên Cloudflare (`latex-editor-db`, binding `DB`, 5 bảng).
+- [ ] Kiểm thử nghiệm thu bằng hai tài khoản trên Worker thật (đăng nhập Google, tạo và chia sẻ project qua link/email).
 
 ## Đợt 3 — Cộng tác thời gian thực
 
@@ -30,4 +35,4 @@
 - [ ] Hàng đợi build, log lỗi, PDF và SyncTeX theo đúng phiên bản nguồn.
 - [ ] Triển khai thử nghiệm, đo độ trễ và chi phí trước khi mở rộng.
 
-R2 tiếp tục lưu tệp lớn và snapshot. Việc cùng chỉnh sửa cần cơ chế hợp nhất và điều phối riêng; đồng bộ Git bundle hiện tại chưa có tính năng đó.
+R2 tiếp tục lưu Git bundle và auth state tạm. D1 SQLite lưu toàn bộ structured data (user, session, project metadata, team). Việc cùng chỉnh sửa cần cơ chế hợp nhất và điều phối riêng; đồng bộ Git bundle hiện tại chưa có tính năng đó.

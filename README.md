@@ -31,6 +31,6 @@ Xem hướng dẫn chi tiết tại [latex-editor-desktop/README.md](latex-edito
 
 ## Tài khoản và lưu lịch sử trên R2
 
-Xem [hướng dẫn backend](latex-editor-cloud/README.md) để tạo Worker, R2 bucket và Google OAuth client. Chỉ backend giữ Google client secret; desktop chỉ cần `LATEX_EDITOR_API_URL`. Repository không chứa khóa dịch vụ và việc chạy test không triển khai tài nguyên cloud.
+Desktop mặc định kết nối Worker đã deploy của ứng dụng; `LATEX_EDITOR_API_URL` chỉ cần khi muốn ghi đè sang backend khác. Xem [hướng dẫn backend](latex-editor-cloud/README.md) để tự triển khai Worker, R2 bucket và Google OAuth client. Chỉ backend giữ Google client secret. Repository không chứa khóa dịch vụ và việc chạy test không triển khai tài nguyên cloud.
 
 `npm test` kiểm tra desktop và luồng cloud với R2/Google giả lập. Chạy thêm `npm --prefix latex-editor-cloud test` và `npm run test:ui --workspace latex-editor-desktop` để kiểm tra API và giao diện Electron. Các test này không thay thế kiểm thử trên tài khoản Google/R2 thật sau khi deploy.

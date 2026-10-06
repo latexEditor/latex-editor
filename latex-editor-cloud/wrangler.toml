@@ -10,6 +10,11 @@ GOOGLE_CLIENT_ID = "650381311880-d5bcftb7u1djc7raui71bfmqdoam8q07.apps.googleuse
 binding = "PROJECTS"
 bucket_name = "latex-editor-projects"
 
+[[d1_databases]]
+binding = "DB"
+database_name = "latex-editor-db"
+database_id = "2ba8fe4b-7487-4b4a-8276-b3551a420150"
+
 [[ratelimits]]
 name = "AUTH_RATE_LIMITER"
 namespace_id = "1001"

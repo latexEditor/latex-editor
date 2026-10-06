@@ -10,7 +10,7 @@ const { AuthManager } = require('./AuthManager');
 const { CloudSyncManager } = require('./CloudSyncManager');
 const { registerFeatureIpc } = require('./featureIpc');
 
-const TOPBAR_HEIGHT = 48;
+const TOPBAR_HEIGHT = 38;
 let mainWindow;
 let editorView;
 let serverManager;
@@ -67,6 +67,63 @@ function allowedEditorUrl(target) {
   }
 }
 
+const HIDE_ACCOUNTS_CSS = `
+  .activitybar .action-item:has(.codicon-account),
+  .activitybar .action-item:has([class*="codicon-account"]),
+  .activitybar .action-item:has([aria-label*="Account" i]),
+  .activitybar .action-item:has([aria-label*="Accounts" i]),
+  .activitybar .action-item:has([aria-label*="Tài khoản" i]),
+  .activitybar .action-item:has([aria-label*="Profile" i]),
+  .activitybar li.action-item[aria-label*="Account" i],
+  .activitybar li.action-item[aria-label*="Accounts" i],
+  .activitybar li.action-item[aria-label*="Tài khoản" i],
+  .activitybar li.action-item[aria-label*="Profile" i],
+  .action-item:has(.codicon-account),
+  .action-item:has([class*="codicon-account"]),
+  .action-item:has([aria-label*="Account" i]),
+  .action-item:has([aria-label*="Accounts" i]),
+  .action-item:has([aria-label*="Tài khoản" i]),
+  li.action-item[aria-label*="Account" i],
+  li.action-item[aria-label*="Accounts" i],
+  li.action-item[aria-label*="Tài khoản" i],
+  [aria-label*="Accounts" i].action-item,
+  [aria-label*="Tài khoản" i].action-item,
+  .codicon-account,
+  [class*="codicon-account"] {
+    display: none !important;
+  }
+`;
+
+const HIDE_ACCOUNTS_SCRIPT = `
+  (() => {
+    const hide = () => {
+      document.querySelectorAll('.codicon-account, [class*="codicon-account"]').forEach((el) => {
+        const item = el.closest('.action-item') || el;
+        item.style.setProperty('display', 'none', 'important');
+      });
+    };
+    hide();
+    if (!window.__latexHideAccountsObserver) {
+      window.__latexHideAccountsObserver = new MutationObserver(hide);
+      window.__latexHideAccountsObserver.observe(document.documentElement, { childList: true, subtree: true });
+    }
+  })();
+`;
+
+async function applyEditorCustomizations() {
+  if (!editorView?.webContents || editorView.webContents.isDestroyed()) return;
+  try {
+    await editorView.webContents.insertCSS(HIDE_ACCOUNTS_CSS);
+  } catch {
+    // Ignore transient navigation errors
+  }
+  try {
+    await editorView.webContents.executeJavaScript(HIDE_ACCOUNTS_SCRIPT);
+  } catch {
+    // Ignore transient script errors
+  }
+}
+
 async function loadProject(projectPath) {
   if (!projectPath) {
     activeProject = null;
@@ -77,6 +134,7 @@ async function loadProject(projectPath) {
   activeProject = workspaceManager.openProject(projectPath);
   const target = workspaceManager.codeServerUrl(config.host, serverManager.port, activeProject.path);
   await editorView.webContents.loadURL(target.toString());
+  await applyEditorCustomizations();
   showEditor();
   notifyState();
   return activeProject;
@@ -104,7 +162,7 @@ async function createWindow() {
     titleBarOverlay: {
       color: '#f8fafc',
       symbolColor: '#334155',
-      height: 48
+      height: 38
     },
     webPreferences: {
       preload: path.join(__dirname, '../preload/preload.js'),
@@ -123,6 +181,8 @@ async function createWindow() {
   });
   mainWindow.contentView.addChildView(editorView);
   layoutEditor();
+  editorView.webContents.on('dom-ready', applyEditorCustomizations);
+  editorView.webContents.on('did-finish-load', applyEditorCustomizations);
   editorView.webContents.on('will-navigate', (event, target) => {
     if (!allowedEditorUrl(target)) event.preventDefault();
   });

@@ -105,13 +105,138 @@ class CloudSyncManager {
       check();
       const name = this.workspace.sanitizeProjectName(decodeURIComponent(response.headers.get('X-Project-Name') || 'Cloud project'));
       const folder = path.join(this.workspace.projectsDir, `${name.slice(0, 65)}-cloud-${crypto.randomUUID().slice(0, 8)}`);
-      await fs.mkdir(folder); // Never overwrite an existing project.
+      await fs.mkdir(folder, { recursive: true }); // Never overwrite an existing project.
       await this.history.importBundle(folder, Buffer.concat(chunks), response.headers.get('X-Git-Head'));
       check();
       await this.writeMetadata(folder, { id, owner: user.id, apiUrl: this.auth.apiUrl, etag: response.headers.get('ETag') });
       this.workspace.remember(folder);
       return this.workspace.describe(folder);
     });
+  }
+
+  async getProjectMeta(project) {
+    return this.exclusive(async (user, check) => {
+      const metadata = await this.readMetadata(project);
+      if (!metadata) return null;
+      if (metadata.apiUrl !== this.auth.apiUrl) {
+        throw new Error('Project này thuộc tài khoản hoặc dịch vụ cloud khác.');
+      }
+      try {
+        const response = await this.auth.request(`/v1/projects/${metadata.id}/meta`);
+        return await response.json();
+      } catch (error) {
+        if (error.status === 404) return null;
+        if (error.status === 403) {
+          throw new Error('Project này thuộc tài khoản hoặc dịch vụ cloud khác.');
+        }
+        throw error;
+      }
+    });
+  }
+
+  async listMembers(project) {
+    return this.exclusive(async (user, check) => {
+      const metadata = await this.readMetadata(project);
+      if (!metadata) throw new Error('Project này chưa được đồng bộ lên cloud.');
+      if (metadata.apiUrl !== this.auth.apiUrl) {
+        throw new Error('Project này thuộc tài khoản hoặc dịch vụ cloud khác.');
+      }
+      try {
+        const response = await this.auth.request(`/v1/projects/${metadata.id}/members`);
+        return (await response.json()).members;
+      } catch (error) {
+        if (error.status === 404) throw new Error('Project này chưa được đồng bộ lên cloud.');
+        if (error.status === 403) throw new Error('Project này thuộc tài khoản hoặc dịch vụ cloud khác.');
+        throw error;
+      }
+    });
+  }
+
+  async invite(project, { email, role }) {
+    return this.exclusive(async (user, check) => {
+      const metadata = await this.readMetadata(project);
+      if (!metadata) throw new Error('Project này chưa được đồng bộ lên cloud.');
+      if (metadata.apiUrl !== this.auth.apiUrl) {
+        throw new Error('Project này thuộc tài khoản hoặc dịch vụ cloud khác.');
+      }
+      const body = { role: role || 'editor' };
+      if (email && email.trim()) body.email = email.trim();
+      const response = await this.auth.request(`/v1/projects/${metadata.id}/invite`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      return await response.json();
+    });
+  }
+
+  async listInvitations(project) {
+    return this.exclusive(async (user, check) => {
+      const metadata = await this.readMetadata(project);
+      if (!metadata) throw new Error('Project này chưa được đồng bộ lên cloud.');
+      if (metadata.apiUrl !== this.auth.apiUrl) {
+        throw new Error('Project này thuộc tài khoản hoặc dịch vụ cloud khác.');
+      }
+      const response = await this.auth.request(`/v1/projects/${metadata.id}/invitations`);
+      return (await response.json()).invitations;
+    });
+  }
+
+  async revokeInvitation(project, invitationId) {
+    return this.exclusive(async (user, check) => {
+      const metadata = await this.readMetadata(project);
+      if (!metadata) throw new Error('Project này chưa được đồng bộ lên cloud.');
+      if (metadata.apiUrl !== this.auth.apiUrl) {
+        throw new Error('Project này thuộc tài khoản hoặc dịch vụ cloud khác.');
+      }
+      const response = await this.auth.request(`/v1/projects/${metadata.id}/invitations/${invitationId}/revoke`, {
+        method: 'POST'
+      });
+      return await response.json();
+    });
+  }
+
+  async removeMember(project, memberUserId) {
+    return this.exclusive(async (user, check) => {
+      const metadata = await this.readMetadata(project);
+      if (!metadata) throw new Error('Project này chưa được đồng bộ lên cloud.');
+      if (metadata.apiUrl !== this.auth.apiUrl) {
+        throw new Error('Project này thuộc tài khoản hoặc dịch vụ cloud khác.');
+      }
+      const response = await this.auth.request(`/v1/projects/${metadata.id}/members/${encodeURIComponent(memberUserId)}`, {
+        method: 'DELETE'
+      });
+      return await response.json();
+    });
+  }
+
+  async acceptInvitation(invitationId, token) {
+    return this.exclusive(async (user, check) => {
+      if (!/^[a-f0-9-]{36}$/.test(invitationId || '')) throw new Error('Mã lời mời không hợp lệ.');
+      const response = await this.auth.request(`/v1/invitations/${invitationId}/accept`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token })
+      });
+      return await response.json();
+    });
+  }
+
+  async myInvitations() {
+    const user = this.auth.status().user;
+    if (!user) throw new Error('Hãy đăng nhập trước.');
+    const response = await this.auth.request('/v1/my-invitations');
+    return (await response.json()).invitations;
+  }
+
+  async declineInvitation(invitationId) {
+    if (!/^[a-f0-9-]{36}$/.test(invitationId || '')) throw new Error('Mã lời mời không hợp lệ.');
+    const user = this.auth.status().user;
+    if (!user) throw new Error('Hãy đăng nhập trước.');
+    const response = await this.auth.request(`/v1/invitations/${invitationId}/decline`, {
+      method: 'POST'
+    });
+    return await response.json();
   }
 }
 

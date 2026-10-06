@@ -1,6 +1,7 @@
 const path = require('node:path');
 
 const rootDir = path.resolve(__dirname, '../..');
+const defaultApiUrl = 'https://latex-editor-cloud.emsidt.workers.dev';
 const appDataRoot = process.env.LATEX_EDITOR_DATA_DIR
   || path.join(process.env.APPDATA || rootDir, 'LatexEditor');
 
@@ -18,6 +19,6 @@ module.exports = {
   historyDir: path.join(appDataRoot, 'history'),
   cloudDir: path.join(appDataRoot, 'cloud'),
   sessionFile: path.join(appDataRoot, 'auth-session.bin'),
-  apiUrl: process.env.LATEX_EDITOR_API_URL || '',
+  apiUrl: process.env.LATEX_EDITOR_API_URL || defaultApiUrl,
   templateDir: path.join(rootDir, 'resources', 'templates', 'basic-article')
 };
