@@ -18,6 +18,10 @@
 - [x] Mời qua link (hỗ trợ cả API backend và UI desktop tạo/sao chép/nhập mã tham gia).
 - [x] Giao diện desktop cho chia sẻ project và quản lý thành viên (hộp thoại Chia sẻ, danh sách thành viên kèm role badge, mời qua email/link, thu hồi và xóa thành viên).
 - [x] Môi trường Worker & D1 thật đã được tạo và deploy trên Cloudflare (`latex-editor-db`, binding `DB`, 5 bảng).
+- [x] Test Electron cho giao diện mời, chấp nhận bằng tài khoản thứ hai, danh sách thành viên, xóa thành viên và thu hồi link mời.
+- [x] Worker tạo email transactional dạng text + HTML và trang hướng dẫn nhận lời mời; tự hạ cấp về thông báo trong app khi binding email chưa sẵn sàng.
+- [x] Link mời dùng cặp invitation ID + token bí mật; server xác minh token trước khi thêm thành viên.
+- [ ] Onboard domain Email Sending, thêm binding `EMAIL`/`EMAIL_FROM` và kiểm tra thư thật (tài khoản Cloudflare hiện trả `Unauthorized 2036` cho Email Sending).
 - [ ] Kiểm thử nghiệm thu bằng hai tài khoản trên Worker thật (đăng nhập Google, tạo và chia sẻ project qua link/email).
 
 ## Đợt 3 — Cộng tác thời gian thực

@@ -52,6 +52,35 @@ async function consume(bucket, key, predicate) {
   return item.value;
 }
 function redirect(url) { return new Response(null, { status: 302, headers: { Location: url.toString(), 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' } }); }
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
+}
+function secureEqual(left, right) {
+  const a = new TextEncoder().encode(String(left));
+  const b = new TextEncoder().encode(String(right));
+  let different = a.length ^ b.length;
+  const length = Math.max(a.length, b.length);
+  for (let index = 0; index < length; index += 1) different |= (a[index % a.length] || 0) ^ (b[index % b.length] || 0);
+  return different === 0;
+}
+async function sendInvitationEmail(env, invitation) {
+  if (!env.EMAIL || !env.EMAIL_FROM) return { sent: false, reason: 'not_configured' };
+  const role = invitation.role === 'editor' ? 'chỉnh sửa' : 'xem';
+  const inviteUrl = `${env.PUBLIC_BASE_URL}/invite/${invitation.id}`;
+  try {
+    const result = await env.EMAIL.send({
+      to: invitation.email,
+      from: { email: env.EMAIL_FROM, name: env.EMAIL_FROM_NAME || 'LaTeX Editor' },
+      subject: `${invitation.inviterName} mời bạn tham gia “${invitation.projectName}”`,
+      text: `${invitation.inviterName} đã mời bạn tham gia project “${invitation.projectName}” với quyền ${role}.\n\nMở lời mời: ${inviteUrl}\nMã lời mời: ${invitation.id}\n\nLời mời hết hạn sau 7 ngày.`,
+      html: `<h2>Lời mời tham gia LaTeX Editor</h2><p><strong>${escapeHtml(invitation.inviterName)}</strong> đã mời bạn tham gia project <strong>${escapeHtml(invitation.projectName)}</strong> với quyền ${role}.</p><p><a href="${escapeHtml(inviteUrl)}">Mở lời mời</a></p><p>Mã lời mời: <code>${invitation.id}</code></p><p>Lời mời hết hạn sau 7 ngày.</p>`
+    });
+    return { sent: true, messageId: result?.messageId || null };
+  } catch (error) {
+    console.error(JSON.stringify({ message: 'invitation email failed', invitationId: invitation.id, error: error instanceof Error ? error.message : String(error) }));
+    return { sent: false, reason: 'delivery_failed' };
+  }
+}
 
 // D1 session — replaces R2 session lookup
 async function session(request, env) {
@@ -79,9 +108,15 @@ export async function handleRequest(request, env, fetcher = fetch) {
     const url = new URL(request.url);
 
     // Health check
-    if (url.pathname === '/health') return json({ service: 'latex-editor-cloud', protocol: 'git-bundle-v1', configured: Boolean(env.DB && env.PROJECTS && env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET) });
+    if (url.pathname === '/health') return json({ service: 'latex-editor-cloud', protocol: 'git-bundle-v1', configured: Boolean(env.DB && env.PROJECTS && env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET), emailConfigured: Boolean(env.EMAIL && env.EMAIL_FROM) });
     if (!env.PROJECTS) throw new HttpError(503, 'Chưa cấu hình R2.');
     if (!env.DB) throw new HttpError(503, 'Chưa cấu hình D1.');
+
+    const invitationPage = url.pathname.match(/^\/invite\/([a-f0-9-]{36})$/);
+    if (invitationPage && request.method === 'GET') {
+      const invitationId = invitationPage[1];
+      return new Response(`<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Lời mời LaTeX Editor</title><style>body{font:16px/1.6 system-ui;margin:0;background:#f8fafc;color:#0f172a}.card{max-width:620px;margin:10vh auto;padding:32px;background:#fff;border:1px solid #e2e8f0;border-radius:14px;box-shadow:0 12px 35px #0f172a14}code{display:block;padding:12px;margin:16px 0;background:#f1f5f9;border-radius:8px;overflow-wrap:anywhere}h1{font-size:24px}</style></head><body><main class="card"><h1>Lời mời tham gia LaTeX Editor</h1><p>Mở ứng dụng, đăng nhập đúng tài khoản Google, chọn <strong>Tài khoản &amp; Cloud</strong> rồi dán mã sau:</p><code>${invitationId}</code><p>Lời mời có hiệu lực trong 7 ngày.</p></main></body></html>`, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'", 'Referrer-Policy': 'no-referrer', 'X-Content-Type-Options': 'nosniff' } });
+    }
 
     // Rate limit auth routes
     if (url.pathname.startsWith('/auth/') && url.pathname !== '/auth/logout') {
@@ -225,6 +260,12 @@ export async function handleRequest(request, env, fetcher = fetch) {
       if (invitation.email && invitation.email.toLowerCase() !== current.user.email.toLowerCase()) {
         throw new HttpError(403, 'Lời mời này dành cho địa chỉ email khác.');
       }
+      if (invitation.token_hash) {
+        const body = await jsonBody(request);
+        if (!TOKEN.test(body.token || '') || !secureEqual(await digest(body.token), invitation.token_hash)) {
+          throw new HttpError(403, 'Token lời mời không hợp lệ.');
+        }
+      }
       // Accept: insert member + update invitation status
       await env.DB.batch([
         env.DB.prepare('INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, ?) ON CONFLICT(project_id, user_id) DO UPDATE SET role = excluded.role').bind(invitation.project_id, current.user.id, invitation.role),
@@ -356,7 +397,8 @@ export async function handleRequest(request, env, fetcher = fetch) {
         await env.DB.prepare(
           'INSERT INTO invitations (id, project_id, inviter_id, email, role, expires_at) VALUES (?, ?, ?, ?, ?, ?)'
         ).bind(invitationId, projectId, current.user.id, email, inviteRole, expiresAt).run();
-        return json({ invitation: { id: invitationId, email, role: inviteRole, expiresAt } });
+        const delivery = await sendInvitationEmail(env, { id: invitationId, email, role: inviteRole, expiresAt, projectName: project.name, inviterName: current.user.name || current.user.email });
+        return json({ invitation: { id: invitationId, email, role: inviteRole, expiresAt }, delivery });
       } else {
         // Link-based invitation
         const inviteToken = random();

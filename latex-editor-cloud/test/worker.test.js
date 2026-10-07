@@ -160,6 +160,15 @@ test('owner can invite by email, invitee can accept and access project', async (
   })).json();
   assert.ok(invite.invitation.id);
   assert.equal(invite.invitation.role, 'editor');
+  assert.equal(invite.delivery.sent, true);
+  assert.equal(env.EMAIL.messages.length, 1);
+  assert.equal(env.EMAIL.messages[0].to, 'invitee@example.test');
+  assert.match(env.EMAIL.messages[0].text, new RegExp(invite.invitation.id));
+  assert.match(env.EMAIL.messages[0].html, /Lời mời tham gia LaTeX Editor/);
+
+  const landing = await handleRequest(new Request(`${env.PUBLIC_BASE_URL}/invite/${invite.invitation.id}`), env);
+  assert.equal(landing.status, 200);
+  assert.match(await landing.text(), new RegExp(invite.invitation.id));
 
   // Invitee sees pending invitation in /v1/my-invitations
   const myInvites = await (await request(env, invitee.token, '/v1/my-invitations')).json();
@@ -321,4 +330,31 @@ test('duplicate email invitation is rejected', async () => {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email: 'dup@example.test', role: 'editor' })
   })).status, 409);
+});
+
+test('link invitations require their secret token', async () => {
+  const env = environment();
+  const owner = (await signedIn(handleRequest, env, 'owner')).session;
+  const invitee = (await signedIn(handleRequest, env, 'link-invitee')).session;
+  await request(env, owner.token, `/v1/projects/${id}`, upload());
+  const created = await (await request(env, owner.token, `/v1/projects/${id}/invite`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: 'viewer' })
+  })).json();
+  const route = `/v1/invitations/${created.invitation.id}/accept`;
+  assert.equal((await request(env, invitee.token, route, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })).status, 403);
+  assert.equal((await request(env, invitee.token, route, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: 'x'.repeat(43) }) })).status, 403);
+  assert.equal((await request(env, invitee.token, route, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: created.invitation.token }) })).status, 200);
+});
+
+test('email invitation remains available when email delivery is not configured', async () => {
+  const env = environment();
+  delete env.EMAIL;
+  delete env.EMAIL_FROM;
+  const owner = (await signedIn(handleRequest, env, 'owner')).session;
+  await request(env, owner.token, `/v1/projects/${id}`, upload());
+  const result = await (await request(env, owner.token, `/v1/projects/${id}/invite`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'offline@example.test', role: 'viewer' })
+  })).json();
+  assert.deepEqual(result.delivery, { sent: false, reason: 'not_configured' });
+  assert.ok(result.invitation.id);
 });

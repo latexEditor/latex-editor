@@ -395,7 +395,14 @@ class MemoryD1Statement {
 }
 
 export function environment() {
-  return { PROJECTS: new MemoryR2(), DB: new MemoryD1(), AUTH_RATE_LIMITER: { limit: async () => ({ success: true }) }, PROJECT_RATE_LIMITER: { limit: async () => ({ success: true }) }, GOOGLE_CLIENT_ID: 'test-client', GOOGLE_CLIENT_SECRET: 'test-only', PUBLIC_BASE_URL: 'https://cloud.example.test' };
+  const EMAIL = {
+    messages: [],
+    async send(message) {
+      this.messages.push(message);
+      return { messageId: `test-email-${this.messages.length}` };
+    }
+  };
+  return { PROJECTS: new MemoryR2(), DB: new MemoryD1(), EMAIL, EMAIL_FROM: 'invites@example.test', EMAIL_FROM_NAME: 'LaTeX Editor', AUTH_RATE_LIMITER: { limit: async () => ({ success: true }) }, PROJECT_RATE_LIMITER: { limit: async () => ({ success: true }) }, GOOGLE_CLIENT_ID: 'test-client', GOOGLE_CLIENT_SECRET: 'test-only', PUBLIC_BASE_URL: 'https://cloud.example.test' };
 }
 
 export async function signedIn(handle, env, subject = 'user-one') {

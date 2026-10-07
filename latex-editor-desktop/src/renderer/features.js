@@ -273,10 +273,11 @@
     event.preventDefault();
     const raw = $('#join-invite-input').value.trim();
     if (!raw) return;
-    const match = raw.match(/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/i);
-    const inviteId = match ? match[0] : raw;
+    const match = raw.match(/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})(?::([A-Za-z0-9_-]{43}))?/i);
+    const inviteId = match ? match[1] : raw;
+    const token = match?.[2];
     cloudAction(async () => {
-      const result = await api.cloudAcceptInvitation(inviteId);
+      const result = await api.cloudAcceptInvitation(inviteId, token);
       $('#join-invite-input').value = '';
       feedback('#account-feedback', 'Đã tham gia project! Tải bản sao từ danh sách để làm việc.');
       await loadCloud();
@@ -500,23 +501,23 @@
     const role = $('#share-invite-role').value;
     if (!email) return;
     shareAction(async () => {
-      await api.cloudInvite(shareProject.path, { email, role });
+      const result = await api.cloudInvite(shareProject.path, { email, role });
       $('#share-invite-email').value = '';
-      feedback('#share-feedback', `Đã tạo lời mời cho ${email}! Khi người đó đăng nhập LaTeX Editor, họ sẽ thấy thông báo lời mời trong mục Tài khoản để bấm Chấp nhận.`);
+      feedback('#share-feedback', result.delivery?.sent
+        ? `Đã gửi email mời tới ${email}.`
+        : `Đã tạo lời mời cho ${email}, nhưng dịch vụ gửi email chưa sẵn sàng. Người đó vẫn thấy lời mời khi đăng nhập ứng dụng.`, !result.delivery?.sent);
       await loadShare();
     });
   });
 
   $('#share-create-link').addEventListener('click', () => shareAction(async () => {
     const role = $('#share-link-role').value;
-    shareAction(async () => {
-      const result = await api.cloudInvite(shareProject.path, { role });
-      const inv = result.invitation;
-      $('#share-link-input').value = inv.id;
-      $('#share-link-result').hidden = false;
-      feedback('#share-feedback', 'Đã tạo mã mời! Sao chép mã bên dưới để gửi.');
-      await loadShare();
-    });
+    const result = await api.cloudInvite(shareProject.path, { role });
+    const inv = result.invitation;
+    $('#share-link-input').value = inv.token ? `${inv.id}:${inv.token}` : inv.id;
+    $('#share-link-result').hidden = false;
+    feedback('#share-feedback', 'Đã tạo mã mời! Sao chép mã bên dưới để gửi.');
+    await loadShare();
   }));
 
   $('#share-copy-link').addEventListener('click', async () => {

@@ -106,6 +106,7 @@ test('owner can manage team: list members, invite by email and link, accept, col
   // Invite by link
   const linkInvite = await cloud.invite(project.path, { role: 'editor' });
   assert.ok(linkInvite.invitation.id);
+  assert.ok(linkInvite.invitation.token);
 
   // Second user signs in and collaborates
   const userTwo = (await signedIn(handleRequest, env, 'user-two')).session;
@@ -123,6 +124,11 @@ test('owner can manage team: list members, invite by email and link, accept, col
   const userTwoWorkspace = new WorkspaceManager({ projectsDir: path.join(userTwoRoot, 'projects'), settingsFile: path.join(userTwoRoot, 'settings.json'), templateDir: path.resolve(__dirname, '../resources/templates/basic-article') });
   const userTwoHistory = new HistoryManager({ historyDir: path.join(userTwoRoot, 'history') });
   const userTwoCloud = new CloudSyncManager({ cloudDir: path.join(userTwoRoot, 'cloud') }, { auth: userTwoAuth, history: userTwoHistory, workspace: userTwoWorkspace });
+
+  await assert.rejects(userTwoCloud.acceptInvitation(linkInvite.invitation.id, 'x'.repeat(43)), /Token lời mời không hợp lệ/);
+  const linkAccept = await userTwoCloud.acceptInvitation(linkInvite.invitation.id, linkInvite.invitation.token);
+  assert.equal(linkAccept.accepted, true);
+  await cloud.removeMember(project.path, userTwo.user.id);
 
   // Owner invites user 2 by email
   const inviteForUserTwo = await cloud.invite(project.path, { email: userTwo.user.email, role: 'editor' });

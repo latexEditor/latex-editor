@@ -2,7 +2,7 @@
 
 Backend Cloudflare Worker cho đăng nhập Google và lưu project + lịch sử Git trên R2. Đây không phải Git hosting server: mỗi lần đồng bộ gửi một Git bundle đầy đủ, không có giao thức Git push/pull hay merge phía server.
 
-Code và kiểm thử đã có; **chưa deploy, chưa gắn tài khoản Google/R2 thật**. Test dùng Google giả lập và R2 trong bộ nhớ. Bạn cần tự cấu hình tài nguyên dưới đây để bật đăng nhập trong desktop.
+Worker production đã được deploy với Google OAuth, D1 và R2. Test tự động vẫn dùng Google/D1/R2/email giả lập để không thay đổi dữ liệu production; luồng chia sẻ cần được nghiệm thu thêm bằng hai tài khoản Google thật.
 
 ## 1. Công cụ và tài nguyên
 
@@ -63,6 +63,21 @@ Mở `https://YOUR-WORKER.workers.dev/health` để kiểm tra service/protocol 
 
 Kiểm thử nghiệm thu trên dịch vụ thật: đăng nhập Google → tạo snapshot → tải lên → tải bản sao → kiểm tra file và lịch sử → đăng xuất → đăng nhập lại. Thử tài khoản thứ hai để kiểm tra project không bị lẫn; thử hai bản sao cùng sửa để xác nhận báo xung đột. Không chạy nghiệm thu bằng tài liệu có dữ liệu nhạy cảm.
 
+## Email lời mời
+
+Worker đã hỗ trợ Cloudflare Email Sending binding và gửi cả bản text lẫn HTML. Để bật gửi thật, tài khoản phải dùng Workers Paid và có một domain dùng Cloudflare DNS đã được onboard tại **Compute → Email Service → Email Sending**. Sau đó thêm vào `wrangler.toml`:
+
+```toml
+[vars]
+EMAIL_FROM = "invites@your-domain.example"
+EMAIL_FROM_NAME = "LaTeX Editor"
+
+[[send_email]]
+name = "EMAIL"
+```
+
+Không dùng `workers.dev` làm domain người gửi. Nếu binding hoặc `EMAIL_FROM` chưa có, lời mời vẫn được lưu và hiện trong app nhưng API trả `delivery.sent = false`; giao diện không tuyên bố rằng email đã được gửi. `GET /health` trả thêm `emailConfigured` để kiểm tra trạng thái.
+
 ## Lưu trữ và vận hành
 
 - `auth/login/`, `auth/code/`, `auth/session/`: trạng thái đăng nhập, mã dùng một lần và token phiên dạng hash. TTL logic lần lượt 3 phút, 1 phút và 7 ngày. Google access token không được lưu; Google client secret nằm trong Worker secret.
@@ -77,7 +92,8 @@ Kiểm thử nghiệm thu trên dịch vụ thật: đăng nhập Google → t�
 
 | Route | Chức năng |
 | --- | --- |
-| `GET /health` | Trạng thái cấu hình công khai |
+| `GET /health` | Trạng thái cấu hình cloud và email |
+| `GET /invite/:id` | Trang hướng dẫn mở mã lời mời trong desktop |
 | `GET /auth/google/start`, `GET /auth/google/callback` | Luồng Google OAuth |
 | `POST /auth/exchange` | Đổi mã một lần + PKCE lấy phiên |
 | `POST /auth/logout`, `GET /v1/me` | Thu hồi phiên / tài khoản hiện tại |
@@ -85,6 +101,10 @@ Kiểm thử nghiệm thu trên dịch vụ thật: đăng nhập Google → t�
 | `GET /v1/projects/:id/meta` | Manifest + ETag |
 | `GET /v1/projects/:id` | Tải bundle |
 | `PUT /v1/projects/:id` | Tải lên có `If-Match` hoặc `If-None-Match: *` |
+| `GET /v1/projects/:id/members` | Danh sách thành viên và quyền |
+| `POST /v1/projects/:id/invite` | Tạo lời mời email hoặc link |
+| `GET /v1/projects/:id/invitations` | Danh sách lời mời của project |
+| `POST /v1/invitations/:id/accept` | Chấp nhận lời mời; link mời bắt buộc token |
 
 Các route tài khoản/project dùng Bearer token. Xung đột ghi trả `409`, phiên thiếu/hết hạn trả `401`. Backend hiện dành cho desktop; web app tương lai cần thiết kế thêm browser session/CORS/CSRF, không đưa token này tùy tiện vào localStorage.
 

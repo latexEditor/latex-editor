@@ -72,3 +72,11 @@ npm start
 - Đăng xuất giữ nguyên project/lịch sử local, xóa phiên trên máy và yêu cầu server thu hồi token. Nếu offline, app cảnh báo chưa thu hồi được token server. Phiên có hạn 7 ngày.
 
 Phiên đăng nhập được mã hóa bằng Electron safeStorage trong `auth-session.bin`; nếu máy không có cơ chế mã hóa phù hợp, chỉ giữ trong bộ nhớ. Token không được gửi xuống renderer. Không nhập Google client secret hoặc khóa R2 vào desktop. Một project đã liên kết cloud không tự chuyển sang tài khoản/backend khác khi đổi đăng nhập.
+
+## Chia sẻ project
+
+- Đồng bộ project lên cloud trước, sau đó bấm **Chia sẻ** để xem thành viên và quyền hiện tại.
+- Owner có thể mời theo email hoặc tạo mã link với quyền editor/viewer, thu hồi lời mời và xóa thành viên.
+- Mã link gồm invitation ID và token bí mật; phải sao chép toàn bộ chuỗi `id:token`. Email invitation chỉ tài khoản Google có đúng địa chỉ nhận mới chấp nhận được.
+- Khi Email Sending đã được cấu hình ở Worker, người nhận nhận email HTML/text kèm trang hướng dẫn. Nếu dịch vụ email chưa sẵn sàng, lời mời vẫn xuất hiện trong mục **Tài khoản & Cloud** sau khi người nhận đăng nhập.
+- Đây là chia sẻ snapshot qua Git bundle, chưa phải cộng tác thời gian thực.

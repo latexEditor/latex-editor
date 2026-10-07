@@ -11,7 +11,7 @@ latex-editor/
 └─ KE_HOACH_LATEX_EDITOR.md
 ```
 
-Desktop đã có lịch sử phiên bản local và giao diện tài khoản/đồng bộ cloud. Backend Google OAuth + R2 được triển khai riêng; chưa có web app, chia sẻ hoặc cộng tác thời gian thực. Khi chưa cấu hình backend, editor và lịch sử local vẫn hoạt động.
+Desktop đã có lịch sử phiên bản local, Google OAuth, đồng bộ R2 và chia sẻ project theo quyền owner/editor/viewer trên D1. Chưa có web app hoặc cộng tác thời gian thực. Khi cloud không khả dụng, editor và lịch sử local vẫn hoạt động.
 
 ## Chạy ứng dụng desktop
 

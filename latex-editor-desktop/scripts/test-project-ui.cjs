@@ -58,7 +58,12 @@ async function waitFor(predicate, message) {
     if (await predicate()) return;
     await new Promise((resolve) => setTimeout(resolve, 30));
   }
-  const page = window && !window.isDestroyed() ? await evaluate(() => ({ width: window.innerWidth, tabs: document.querySelectorAll('.project-tab').length })) : null;
+  const page = window && !window.isDestroyed() ? await evaluate(() => ({
+    width: window.innerWidth,
+    tabs: document.querySelectorAll('.project-tab').length,
+    accountFeedback: document.querySelector('#account-feedback')?.textContent,
+    shareFeedback: document.querySelector('#share-feedback')?.textContent
+  })) : null;
   throw new Error(`Timed out: ${message}; page=${JSON.stringify(page)}`);
 }
 const waitForPage = (predicate, message) => waitFor(() => evaluate(predicate), message);
@@ -175,7 +180,7 @@ async function run() {
   // Use the real Worker routes and an in-memory R2 binding. Only Google's
   // external identity endpoints are fixtures; no production cloud is contacted.
   const { handleRequest } = await import('../../latex-editor-cloud/src/index.js');
-  const { environment } = await import('../../latex-editor-cloud/test/support.js');
+  const { environment, signedIn } = await import('../../latex-editor-cloud/test/support.js');
   const cloudEnvironment = environment();
   const google = async (url) => Response.json(url.includes('/token')
     ? { access_token: 'test-google-access' }
@@ -199,6 +204,45 @@ async function run() {
   await click('#cloud-upload');
   await waitForPage(() => document.querySelectorAll('.cloud-project').length === 1 && document.querySelector('#account-feedback').textContent.includes('đồng bộ'), 'upload history to cloud');
   await capture('account-cloud');
+
+  // Exercise the actual sharing dialog with a second account against the
+  // in-memory Worker/D1/R2 environment.
+  await click('#account-close');
+  await waitFor(() => !overlayOpen, 'restore editor before sharing');
+  await click('#share-button');
+  await waitForPage(() => document.querySelector('#share-dialog').open
+    && document.querySelector('#share-my-role').textContent.includes('Chủ sở hữu')
+    && document.querySelectorAll('#share-members-list .member-item').length === 1, 'owner sharing dialog');
+  await evaluate(() => {
+    document.querySelector('#share-invite-email').value = 'invitee@example.test';
+    document.querySelector('#share-email-form').requestSubmit();
+  });
+  await waitForPage(() => document.querySelectorAll('#share-pending-list .pending-item').length === 1, 'email invitation in sharing UI');
+  const invitationId = cloudEnvironment.DB.tables.invitations.find((item) => item.email === 'invitee@example.test').id;
+  const invitee = (await signedIn(handleRequest, cloudEnvironment, 'invitee')).session;
+  const accepted = await handleRequest(new Request(`${cloudEnvironment.PUBLIC_BASE_URL}/v1/invitations/${invitationId}/accept`, {
+    method: 'POST', headers: { Authorization: `Bearer ${invitee.token}` }
+  }), cloudEnvironment);
+  assert.equal(accepted.status, 200);
+  await click('#share-refresh');
+  await waitForPage(() => document.querySelectorAll('#share-members-list .member-item').length === 2
+    && document.querySelectorAll('#share-pending-list .pending-item').length === 0, 'accepted member in sharing UI');
+  await click('#share-members-list .member-item:last-child .btn-danger');
+  await waitForPage(() => document.querySelectorAll('#share-members-list .member-item').length === 1, 'remove member in sharing UI');
+  await click('#share-create-link');
+  await waitForPage(() => document.querySelector('#share-link-input').value.includes(':'), 'secure link invitation code');
+  assert.match(await evaluate(() => document.querySelector('#share-link-input').value), /^[a-f0-9-]{36}:[A-Za-z0-9_-]{43}$/);
+  await click('#share-pending-list .pending-item .btn-danger');
+  await waitForPage(() => document.querySelectorAll('#share-pending-list .pending-item').length === 0, 'revoke link invitation in sharing UI');
+  await capture('sharing-team');
+  await click('#share-close');
+  await waitFor(() => !overlayOpen, 'restore editor after sharing');
+  await evaluate(() => document.querySelectorAll('.cloud-project').forEach((row) => { row.dataset.stale = 'true'; }));
+  await click('#account-button');
+  await waitForPage(() => document.querySelector('#account-dialog').open
+    && document.querySelectorAll('.cloud-project:not([data-stale])').length === 1
+    && !document.querySelector('#cloud-refresh').disabled, 'reopen account after sharing');
+
   await click('.cloud-project button');
   await waitForPage(() => document.querySelector('#account-feedback').textContent.includes('Đã tải'), 'download cloud project');
   const cloudCopy = activeProject;
@@ -312,7 +356,7 @@ async function run() {
   assert.equal(await evaluate(() => document.querySelector('.empty-workspace-card').getBoundingClientRect().top >= 48), true, 'welcome screen must scroll without clipping its top');
   await capture('welcome-small-window');
   assert.deepEqual(errors, []);
-  console.log('PASS: projects, templates, history, diff, cancel/restore with backup, Google loopback login, cloud upload/download with full history, logout, compact layout.');
+  console.log('PASS: projects, templates, history, diff, Google login, cloud history, team sharing UI, logout, compact layout.');
 }
 
 const timeout = setTimeout(() => { console.error('UI test timeout'); app.exit(1); }, 60000);

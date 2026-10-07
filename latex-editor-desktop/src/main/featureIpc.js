@@ -39,6 +39,7 @@ function registerFeatureIpc({ ipcMain, dialog, workspace, history, auth, cloud, 
     'latex:cloud-invite': (_event, value, options) => cloud.invite(project(value), options),
     'latex:cloud-list-invitations': (_event, value) => cloud.listInvitations(project(value)),
     'latex:cloud-revoke-invitation': (_event, value, invitationId) => cloud.revokeInvitation(project(value), invitationId),
+    'latex:cloud-remove-member': (_event, value, memberUserId) => cloud.removeMember(project(value), memberUserId),
     'latex:cloud-accept-invitation': (_event, invitationId, token) => cloud.acceptInvitation(invitationId, token),
     'latex:cloud-my-invitations': () => cloud.myInvitations(),
     'latex:cloud-decline-invitation': (_event, invitationId) => cloud.declineInvitation(invitationId)
