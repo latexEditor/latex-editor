@@ -1,6 +1,6 @@
 # LaTeX Editor Desktop
 
-Ứng dụng Electron local-first để sửa, biên dịch và xem tài liệu LaTeX trong giao diện VS Code nhúng qua code-server.
+Ứng dụng Electron cloud-first để sửa, biên dịch và xem tài liệu LaTeX trong giao diện VS Code nhúng qua code-server. Project có bản làm việc local và lịch sử được đồng bộ lên R2.
 
 ## Yêu cầu
 
@@ -31,7 +31,7 @@ Xem thêm [docs/development.md](docs/development.md) và [docs/architecture.md](
 
 ## Project và mẫu tài liệu
 
-- **Project mới**: thư viện 7 mẫu có ảnh xem trước kết quả PDF, tìm kiếm có/không dấu và lọc theo loại tài liệu. Gồm Bài báo, Báo cáo, Slide Beamer, Tài liệu tối giản, Báo cáo tiếng Việt, Luận văn tiếng Việt và CV tiếng Việt.
+- **Project mới**: yêu cầu đăng nhập; app tạo bản làm việc local, lập phiên bản đầu tiên và tự tải toàn bộ source/lịch sử lên R2. Thư viện 7 mẫu có ảnh xem trước kết quả PDF, tìm kiếm có/không dấu và lọc theo loại tài liệu. Gồm Bài báo, Báo cáo, Slide Beamer, Tài liệu tối giản, Báo cáo tiếng Việt, Luận văn tiếng Việt và CV tiếng Việt.
 - Mỗi mẫu hiển thị ngôn ngữ và compiler. Ba mẫu tiếng Việt được cấu hình sẵn XeLaTeX và font Latin Modern Roman; chạy hai lượt để cập nhật mục lục/tham chiếu. Cấu hình XeLaTeX được giữ khi mở lại project.
 - Nếu thiếu compiler của mẫu, hộp tạo project hiển thị hướng dẫn; vẫn có thể tạo để soạn nội dung. Mẫu luận văn là cấu trúc chung, cần điều chỉnh theo yêu cầu của trường.
 - **Gần đây**: tìm theo tên/đường dẫn và mở lại tối đa 12 project gần nhất, kể cả sau khi khởi động lại app. Trang trống hiển thị 5 project gần nhất để mở nhanh.
@@ -66,7 +66,7 @@ npm start
 ```
 
 - Bấm **Tài khoản** (☁) → **Đăng nhập bằng Google**; hoàn tất trong trình duyệt hệ thống. Có thể hủy lượt đăng nhập đang chờ.
-- Lưu file bằng Ctrl+S rồi tải project đang mở lên cloud. App tạo snapshot nếu có thay đổi và tải cả lịch sử dưới dạng Git bundle. Đây là đồng bộ **thủ công**, không tự tải lên sau mỗi lần sửa.
+- Project mới được tải lên cloud ngay khi tạo. Mỗi lần bấm **Lưu phiên bản** hoặc khôi phục lịch sử, app tự tải toàn bộ source và lịch sử dưới dạng Git bundle lên R2. Nút **Đồng bộ project đang mở** dùng để thử lại khi mạng/R2 từng bị lỗi hoặc để chụp nhanh nội dung đã Ctrl+S mà chưa lưu phiên bản.
 - **Tải bản sao** tạo thư mục mới kèm lịch sử; không ghi đè project đang có. Bản sao có thể được chỉnh sửa rồi đồng bộ tiếp.
 - Nếu cloud đã đổi từ máy khác, app báo xung đột. Tải bản sao cloud, đối chiếu/chuyển thay đổi cần giữ sang bản mới rồi tải lên từ bản đó. Chưa có merge tự động hay branch UI.
 - Đăng xuất giữ nguyên project/lịch sử local, xóa phiên trên máy và yêu cầu server thu hồi token. Nếu offline, app cảnh báo chưa thu hồi được token server. Phiên có hạn 7 ngày.
@@ -75,7 +75,7 @@ Phiên đăng nhập được mã hóa bằng Electron safeStorage trong `auth-s
 
 ## Chia sẻ project
 
-- Đồng bộ project lên cloud trước, sau đó bấm **Chia sẻ** để xem thành viên và quyền hiện tại.
+- Project mới đã được đồng bộ lên cloud trong lúc tạo; sau đó bấm **Chia sẻ** để xem thành viên và quyền hiện tại.
 - Owner có thể mời theo email hoặc tạo mã link với quyền editor/viewer, thu hồi lời mời và xóa thành viên.
 - Mã link gồm invitation ID và token bí mật; phải sao chép toàn bộ chuỗi `id:token`. Email invitation chỉ tài khoản Google có đúng địa chỉ nhận mới chấp nhận được.
 - Khi Email Sending đã được cấu hình ở Worker, người nhận nhận email HTML/text kèm trang hướng dẫn. Nếu dịch vụ email chưa sẵn sàng, lời mời vẫn xuất hiện trong mục **Tài khoản & Cloud** sau khi người nhận đăng nhập.

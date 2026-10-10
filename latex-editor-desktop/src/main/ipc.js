@@ -1,6 +1,6 @@
 const { BrowserWindow, shell } = require('electron');
 
-function registerIpc({ ipcMain, dialog, workspaceManager, runtimeManager, openProject, closeProject, hideEditor, showEditor, getState }) {
+function registerIpc({ ipcMain, dialog, workspaceManager, runtimeManager, auth, cloud, openProject, closeProject, hideEditor, showEditor, getState }) {
   let choosingProject = false;
   const channels = [
     'latex:get-state', 'latex:list-projects', 'latex:create-project',
@@ -20,9 +20,20 @@ function registerIpc({ ipcMain, dialog, workspaceManager, runtimeManager, openPr
   });
   ipcMain.handle('latex:get-runtime-status', () => runtimeManager.getStatus());
   ipcMain.handle('latex:create-project', async (_event, name, templateId) => {
+    if (!auth?.status().signedIn) throw new Error('Hãy đăng nhập trước khi tạo project mới để dữ liệu được lưu lên cloud.');
     const project = workspaceManager.createProject(name, templateId);
+    let cloudWarning = null;
+    let cloudProject = null;
+    try {
+      const synced = await cloud.upload(project.path);
+      cloudProject = synced.project || null;
+    } catch (error) {
+      // The local working copy must remain recoverable when the network or cloud
+      // is unavailable. The UI exposes the warning and the manual retry action.
+      cloudWarning = `Project đã được tạo trên máy nhưng chưa lưu được lên cloud: ${error.message}`;
+    }
     await openProject(project.path);
-    return project;
+    return { ...project, cloudProject, cloudWarning };
   });
   ipcMain.handle('latex:open-project', async (_event, projectPath) => {
     const project = workspaceManager.openProject(projectPath);

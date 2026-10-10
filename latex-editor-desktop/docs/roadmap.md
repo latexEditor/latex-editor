@@ -15,6 +15,7 @@
 - [x] API mời qua email, chấp nhận lời mời, thu hồi lời mời, xóa thành viên.
 - [x] Test bao gồm: cô lập project theo tài khoản, mời/chấp nhận/thu hồi, quyền viewer/editor/owner, ngăn xóa owner cuối.
 - [x] Project ID dùng chung (chuyển sang bảng `projects` toàn cục kết hợp `project_members`, R2 bundle key dạng `bundles/:projectId/:uuid.bundle`).
+- [x] Project mới yêu cầu đăng nhập, tự tạo snapshot/upload lên R2; lưu hoặc khôi phục lịch sử tự đồng bộ lại và vẫn giữ bản local khi mạng lỗi.
 - [x] Mời qua link (hỗ trợ cả API backend và UI desktop tạo/sao chép/nhập mã tham gia).
 - [x] Giao diện desktop cho chia sẻ project và quản lý thành viên (hộp thoại Chia sẻ, danh sách thành viên kèm role badge, mời qua email/link, thu hồi và xóa thành viên).
 - [x] Môi trường Worker & D1 thật đã được tạo và deploy trên Cloudflare (`latex-editor-db`, binding `DB`, 5 bảng).

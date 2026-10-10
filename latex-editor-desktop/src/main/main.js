@@ -162,7 +162,7 @@ async function createWindow() {
     titleBarOverlay: {
       color: '#f8fafc',
       symbolColor: '#334155',
-      height: 38
+      height: 32
     },
     webPreferences: {
       preload: path.join(__dirname, '../preload/preload.js'),
@@ -217,6 +217,8 @@ async function startup() {
     dialog,
     workspaceManager,
     runtimeManager,
+    auth: authManager,
+    cloud,
     openProject: loadProject,
     closeProject: closeProjectTab,
     hideEditor: () => { shellOverlayOpen = true; hideEditor(); },

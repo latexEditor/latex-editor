@@ -9,20 +9,36 @@ function registerFeatureIpc({ ipcMain, dialog, workspace, history, auth, cloud, 
     if (typeof value !== 'string' || !value) throw new Error('Hãy mở một project trước.');
     return workspace.getProjectLocation(value);
   };
+  const syncSavedProject = async (location, result) => {
+    if (!auth.status().signedIn) {
+      return { ...result, cloudSynced: false, cloudWarning: 'Phiên bản đã lưu trên máy. Hãy đăng nhập để đồng bộ lên cloud.' };
+    }
+    try {
+      const synced = await cloud.upload(location);
+      return { ...result, cloudSynced: true, cloudProject: synced.project || null };
+    } catch (error) {
+      return { ...result, cloudSynced: false, cloudWarning: `Phiên bản đã lưu trên máy nhưng chưa đồng bộ được lên cloud: ${error.message}` };
+    }
+  };
   const handlers = {
     'latex:history-list': (_event, value) => history.list(project(value)),
-    'latex:history-save': (_event, value, message) => history.save(project(value), message, auth.status().user || {}),
+    'latex:history-save': async (_event, value, message) => {
+      const location = project(value);
+      const result = await history.save(location, message, auth.status().user || {});
+      return syncSavedProject(location, result);
+    },
     'latex:history-diff': (_event, value, hash) => history.diff(project(value), hash),
     'latex:history-restore': async (event, value, hash) => {
       const location = project(value);
-      const result = await dialog.showMessageBox(owner(event), {
+      const confirmation = await dialog.showMessageBox(owner(event), {
         type: 'warning', title: 'Khôi phục phiên bản',
         message: 'Khôi phục nội dung project về phiên bản đã chọn?',
         detail: 'Hãy lưu mọi tab bằng Ctrl+S trước khi tiếp tục. App sẽ lưu một bản bảo vệ các file trên ổ đĩa rồi khôi phục. Nội dung chưa lưu trong editor không nằm trong bản bảo vệ.',
         buttons: ['Hủy', 'Lưu bản bảo vệ và khôi phục'], defaultId: 0, cancelId: 0, noLink: true
       });
-      if (result.response !== 1) return { canceled: true };
-      return history.restore(location, hash, auth.status().user || {});
+      if (confirmation.response !== 1) return { canceled: true };
+      const restored = await history.restore(location, hash, auth.status().user || {});
+      return syncSavedProject(location, restored);
     },
     'latex:auth-status': () => auth.status(),
     'latex:auth-login': () => auth.login(),

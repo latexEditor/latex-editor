@@ -81,14 +81,19 @@
       const result = await api.historySave(historyProject.path, $('#history-message').value.trim());
       $('#history-message').value = '';
       await loadHistory();
-      feedback('#history-feedback', result.unchanged ? 'Không có thay đổi mới để lưu.' : 'Đã lưu phiên bản.');
+      const localMessage = result.unchanged ? 'Không có thay đổi mới để lưu.' : 'Đã lưu phiên bản.';
+      feedback('#history-feedback', result.cloudWarning ? `${localMessage} ${result.cloudWarning}` : `${localMessage} Đã đồng bộ lên cloud.`, Boolean(result.cloudWarning));
     });
   });
   $('#history-refresh').addEventListener('click', () => historyAction(async () => { await loadHistory(); feedback('#history-feedback', 'Đã cập nhật lịch sử.'); }));
   $('#history-restore').addEventListener('click', () => historyAction(async () => {
     if (!selectedHash) return;
     const result = await api.historyRestore(historyProject.path, selectedHash);
-    if (!result.canceled) { await loadHistory(); feedback('#history-feedback', `Đã khôi phục. Bản bảo vệ: ${result.backup.slice(0, 8)}.`); }
+    if (!result.canceled) {
+      await loadHistory();
+      const restoredMessage = `Đã khôi phục. Bản bảo vệ: ${result.backup.slice(0, 8)}.`;
+      feedback('#history-feedback', result.cloudWarning ? `${restoredMessage} ${result.cloudWarning}` : `${restoredMessage} Đã đồng bộ lên cloud.`, Boolean(result.cloudWarning));
+    }
     else feedback('#history-feedback', 'Đã hủy khôi phục.');
   }));
   $('#history-close').addEventListener('click', () => { if (!historyBusy) historyDialog.close(); });

@@ -283,8 +283,9 @@ document.querySelector('#new-project-form').addEventListener('submit', async (ev
     button.disabled = true;
     cancel.disabled = true;
     button.textContent = 'Đang tạo…';
-    await api.createProject(name, templateId);
+    const project = await api.createProject(name, templateId);
     newDialog.close();
+    if (project.cloudWarning) window.alert(project.cloudWarning);
   } catch (error) { errorBox.textContent = error.message; }
   finally {
     creatingProject = false;

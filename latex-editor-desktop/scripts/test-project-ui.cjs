@@ -42,6 +42,8 @@ registerFeatureIpc({ ipcMain, dialog, workspace: manager, history, auth, cloud,
 
 registerIpc({
   ipcMain, dialog, workspaceManager: manager,
+  auth: { status: () => ({ signedIn: true }) },
+  cloud: { upload: async () => ({ status: 'synced', project: { id: 'ui-test-cloud-project' } }) },
   runtimeManager: { getStatus: () => ({ canBuild: true, distribution: 'Test runtime', tools: [] }) },
   openProject: async (location) => { activeProject = manager.openProject(location); notify(); },
   closeProject: async (location) => { activeProject = manager.closeProject(location); notify(); },

@@ -176,7 +176,8 @@ class CodeServerManager {
       const settings = {
         'window.commandCenter': false,
         'window.customTitleBarVisibility': 'never',
-        'workbench.startupEditor': 'welcomePage'
+        'workbench.startupEditor': 'welcomePage',
+        'window.zoomLevel': 0
       };
 
       const settingsJson = `${JSON.stringify(settings, null, 2)}\n`;
