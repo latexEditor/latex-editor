@@ -5,6 +5,7 @@ const ID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const ROLES = ['owner', 'editor', 'viewer'];
 const WRITE_ROLES = ['owner', 'editor'];
+export { ProjectCollaborationRoom } from './collaboration-room.js';
 class HttpError extends Error { constructor(status, message) { super(message); this.status = status; } }
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
 const random = () => base64(crypto.getRandomValues(new Uint8Array(32)));
@@ -84,7 +85,12 @@ async function sendInvitationEmail(env, invitation) {
 
 // D1 session — replaces R2 session lookup
 async function session(request, env) {
-  const token = request.headers.get('Authorization')?.replace(/^Bearer /, '');
+  const protocolToken = (request.headers.get('Sec-WebSocket-Protocol') || '')
+    .split(',')
+    .map((value) => value.trim())
+    .find((value) => value.startsWith('latex-editor-auth.'))
+    ?.slice('latex-editor-auth.'.length);
+  const token = request.headers.get('Authorization')?.replace(/^Bearer /, '') || protocolToken;
   if (!TOKEN.test(token || '')) throw new HttpError(401, 'Cần đăng nhập.');
   const tokenHash = await digest(token);
   const row = await env.DB.prepare(
@@ -108,7 +114,7 @@ export async function handleRequest(request, env, fetcher = fetch) {
     const url = new URL(request.url);
 
     // Health check
-    if (url.pathname === '/health') return json({ service: 'latex-editor-cloud', protocol: 'git-bundle-v1', configured: Boolean(env.DB && env.PROJECTS && env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET), emailConfigured: Boolean(env.EMAIL && env.EMAIL_FROM) });
+    if (url.pathname === '/health') return json({ service: 'latex-editor-cloud', protocol: 'git-bundle-v1', configured: Boolean(env.DB && env.PROJECTS && env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET), emailConfigured: Boolean(env.EMAIL && env.EMAIL_FROM), collaborationConfigured: Boolean(env.COLLABORATION_ROOMS) });
     if (!env.PROJECTS) throw new HttpError(503, 'Chưa cấu hình R2.');
     if (!env.DB) throw new HttpError(503, 'Chưa cấu hình D1.');
 
@@ -326,6 +332,25 @@ export async function handleRequest(request, env, fetcher = fetch) {
       return json({ id: project.id, name: project.name, head: project.head, protocol: project.protocol, updatedAt: project.updated_at, role, etag: `"${project.updated_at}"` });
     }
 
+    // Authenticated real-time room. One Durable Object coordinates each project.
+    if ((subpath === '/collaboration' || subpath === '/collaboration/presence') && request.method === 'GET') {
+      if (!env.COLLABORATION_ROOMS) throw new HttpError(503, 'Phòng cộng tác chưa được cấu hình.');
+      const stub = env.COLLABORATION_ROOMS.getByName(projectId);
+      const presenceOnly = subpath.endsWith('/presence');
+      if (!presenceOnly && request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') throw new HttpError(426, 'Cần kết nối WebSocket.');
+      const headers = new Headers({
+        'X-Collaboration-User-Id': current.user.id,
+        'X-Collaboration-User-Name': current.user.name || current.user.email,
+        'X-Collaboration-Role': role
+      });
+      if (current.user.avatar_url) headers.set('X-Collaboration-User-Avatar', current.user.avatar_url);
+      if (!presenceOnly) {
+        headers.set('Upgrade', 'websocket');
+        headers.set('Sec-WebSocket-Protocol', 'latex-editor-v1');
+      }
+      return stub.fetch(new Request(`https://collaboration.internal/${presenceOnly ? 'presence' : 'connect'}`, { headers }));
+    }
+
     // GET project bundle (download)
     if (subpath === '' && request.method === 'GET') {
       const bundle = await env.PROJECTS.get(project.bundle_key);
@@ -428,6 +453,10 @@ export async function handleRequest(request, env, fetcher = fetch) {
         if (ownerCount.count <= 1) throw new HttpError(400, 'Không thể rời project khi bạn là chủ sở hữu duy nhất.');
       }
       await env.DB.prepare('DELETE FROM project_members WHERE project_id = ? AND user_id = ?').bind(projectId, targetUserId).run();
+      if (env.COLLABORATION_ROOMS) {
+        const headers = new Headers({ 'X-Collaboration-User-Id': targetUserId });
+        await env.COLLABORATION_ROOMS.getByName(projectId).fetch(new Request('https://collaboration.internal/disconnect', { method: 'POST', headers }));
+      }
       return json({ removed: true });
     }
 

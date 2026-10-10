@@ -54,6 +54,11 @@ class AuthManager {
     return { configured: Boolean(this.apiUrl), signedIn: Boolean(valid), user: valid ? this.session.user : null, signingIn: Boolean(this.pending) };
   }
 
+  webSocketProtocols() {
+    if (!this.session || this.session.expiresAt <= Date.now()) throw new Error('Hãy đăng nhập trước.');
+    return ['latex-editor-v1', `latex-editor-auth.${this.session.token}`];
+  }
+
   async initialize() {
     if (!this.apiUrl) return;
     try {

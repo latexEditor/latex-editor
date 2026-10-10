@@ -23,6 +23,24 @@ export class MemoryR2 {
   }
 }
 
+export class MemoryCollaborationRooms {
+  constructor() { this.calls = []; }
+  getByName(projectId) {
+    return {
+      fetch: async (request) => {
+        this.calls.push({
+          projectId,
+          path: new URL(request.url).pathname,
+          method: request.method,
+          headers: Object.fromEntries(request.headers)
+        });
+        if (new URL(request.url).pathname === '/presence') return new Response(JSON.stringify({ participants: [] }), { headers: { 'Content-Type': 'application/json' } });
+        return new Response(null, { status: 204 });
+      }
+    };
+  }
+}
+
 /**
  * Minimal in-memory D1 simulator for testing.
  * Supports the exact SQL patterns used by the worker — not a general SQL engine.
@@ -402,7 +420,7 @@ export function environment() {
       return { messageId: `test-email-${this.messages.length}` };
     }
   };
-  return { PROJECTS: new MemoryR2(), DB: new MemoryD1(), EMAIL, EMAIL_FROM: 'invites@example.test', EMAIL_FROM_NAME: 'LaTeX Editor', AUTH_RATE_LIMITER: { limit: async () => ({ success: true }) }, PROJECT_RATE_LIMITER: { limit: async () => ({ success: true }) }, GOOGLE_CLIENT_ID: 'test-client', GOOGLE_CLIENT_SECRET: 'test-only', PUBLIC_BASE_URL: 'https://cloud.example.test' };
+  return { PROJECTS: new MemoryR2(), DB: new MemoryD1(), COLLABORATION_ROOMS: new MemoryCollaborationRooms(), EMAIL, EMAIL_FROM: 'invites@example.test', EMAIL_FROM_NAME: 'LaTeX Editor', AUTH_RATE_LIMITER: { limit: async () => ({ success: true }) }, PROJECT_RATE_LIMITER: { limit: async () => ({ success: true }) }, GOOGLE_CLIENT_ID: 'test-client', GOOGLE_CLIENT_SECRET: 'test-only', PUBLIC_BASE_URL: 'https://cloud.example.test' };
 }
 
 export async function signedIn(handle, env, subject = 'user-one') {

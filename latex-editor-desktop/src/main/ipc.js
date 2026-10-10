@@ -1,11 +1,11 @@
 const { BrowserWindow, shell } = require('electron');
 
-function registerIpc({ ipcMain, dialog, workspaceManager, runtimeManager, auth, cloud, openProject, closeProject, hideEditor, showEditor, getState }) {
+function registerIpc({ ipcMain, dialog, workspaceManager, runtimeManager, auth, cloud, openProject, closeProject, hideEditor, showEditor, togglePresencePopover = () => false, getState }) {
   let choosingProject = false;
   const channels = [
     'latex:get-state', 'latex:list-projects', 'latex:create-project',
     'latex:choose-project', 'latex:open-project', 'latex:get-runtime-status',
-    'latex:close-project', 'latex:hide-editor', 'latex:show-editor',
+    'latex:close-project', 'latex:hide-editor', 'latex:show-editor', 'latex:toggle-presence-popover',
     'latex:list-templates', 'latex:forget-project', 'latex:reveal-project'
   ];
   for (const channel of channels) ipcMain.removeHandler(channel);
@@ -67,6 +67,7 @@ function registerIpc({ ipcMain, dialog, workspaceManager, runtimeManager, auth, 
   ipcMain.handle('latex:show-editor', () => {
     showEditor();
   });
+  ipcMain.handle('latex:toggle-presence-popover', (_event, anchor) => togglePresencePopover(anchor));
 }
 
 module.exports = { registerIpc };

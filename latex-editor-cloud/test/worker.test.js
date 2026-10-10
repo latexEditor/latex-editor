@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { handleRequest } from '../src/index.js';
+import { ProjectCollaborationRoom } from '../src/collaboration-room.js';
 import { environment, signedIn } from './support.js';
 
 const id = '11111111-1111-4111-8111-111111111111';
@@ -357,4 +358,96 @@ test('email invitation remains available when email delivery is not configured',
   })).json();
   assert.deepEqual(result.delivery, { sent: false, reason: 'not_configured' });
   assert.ok(result.invitation.id);
+});
+
+test('project members can enter their authenticated collaboration room', async () => {
+  const env = environment();
+  const owner = (await signedIn(handleRequest, env, 'room-owner')).session;
+  await request(env, owner.token, `/v1/projects/${id}`, upload());
+
+  const missingUpgrade = await request(env, owner.token, `/v1/projects/${id}/collaboration`);
+  assert.equal(missingUpgrade.status, 426);
+  assert.equal(env.COLLABORATION_ROOMS.calls.length, 0);
+
+  const connected = await request(env, owner.token, `/v1/projects/${id}/collaboration`, { headers: { Upgrade: 'websocket' } });
+  assert.equal(connected.status, 204);
+  assert.equal(env.COLLABORATION_ROOMS.calls.length, 1);
+  assert.deepEqual(env.COLLABORATION_ROOMS.calls[0], {
+    projectId: id,
+    path: '/connect',
+    method: 'GET',
+    headers: {
+      'sec-websocket-protocol': 'latex-editor-v1',
+      upgrade: 'websocket',
+      'x-collaboration-role': 'owner',
+      'x-collaboration-user-id': 'google-room-owner',
+      'x-collaboration-user-name': 'room-owner'
+    }
+  });
+
+  const presence = await request(env, owner.token, `/v1/projects/${id}/collaboration/presence`);
+  assert.equal(presence.status, 200);
+  assert.deepEqual(await presence.json(), { participants: [] });
+});
+
+test('collaboration room rejects non-members and accepts auth via WebSocket subprotocol', async () => {
+  const env = environment();
+  const owner = (await signedIn(handleRequest, env, 'socket-owner')).session;
+  const outsider = (await signedIn(handleRequest, env, 'socket-outsider')).session;
+  await request(env, owner.token, `/v1/projects/${id}`, upload());
+
+  const outsiderRequest = new Request(`${env.PUBLIC_BASE_URL}/v1/projects/${id}/collaboration`, {
+    headers: { Upgrade: 'websocket', 'Sec-WebSocket-Protocol': `latex-editor-v1, latex-editor-auth.${outsider.token}` }
+  });
+  assert.equal((await handleRequest(outsiderRequest, env)).status, 403);
+  assert.equal(env.COLLABORATION_ROOMS.calls.length, 0);
+
+  const ownerRequest = new Request(`${env.PUBLIC_BASE_URL}/v1/projects/${id}/collaboration`, {
+    headers: { Upgrade: 'websocket', 'Sec-WebSocket-Protocol': `latex-editor-v1, latex-editor-auth.${owner.token}` }
+  });
+  assert.equal((await handleRequest(ownerRequest, env)).status, 204);
+  assert.equal(env.COLLABORATION_ROOMS.calls.length, 1);
+});
+
+test('removing a member disconnects their active collaboration sessions', async () => {
+  const env = environment();
+  const owner = (await signedIn(handleRequest, env, 'disconnect-owner')).session;
+  const member = (await signedIn(handleRequest, env, 'disconnect-member')).session;
+  await request(env, owner.token, `/v1/projects/${id}`, upload());
+  const invite = await (await request(env, owner.token, `/v1/projects/${id}/invite`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: member.user.email, role: 'editor' })
+  })).json();
+  await request(env, member.token, `/v1/invitations/${invite.invitation.id}/accept`, { method: 'POST' });
+
+  assert.equal((await request(env, owner.token, `/v1/projects/${id}/members/${member.user.id}`, { method: 'DELETE' })).status, 200);
+  const disconnect = env.COLLABORATION_ROOMS.calls.at(-1);
+  assert.equal(disconnect.path, '/disconnect');
+  assert.equal(disconnect.method, 'POST');
+  assert.equal(disconnect.headers['x-collaboration-user-id'], member.user.id);
+});
+
+test('collaboration room restores presence from WebSocket attachments and handles control messages', async () => {
+  class FakeSocket {
+    constructor(attachment) { this.attachment = attachment; this.messages = []; this.closed = null; }
+    deserializeAttachment() { return this.attachment; }
+    send(message) { this.messages.push(JSON.parse(message)); }
+    close(code, reason) { this.closed = { code, reason }; }
+  }
+  const first = new FakeSocket({ userId: 'u1', name: 'One', avatarUrl: null, role: 'owner', joinedAt: 1 });
+  const second = new FakeSocket({ userId: 'u1', name: 'One', avatarUrl: null, role: 'owner', joinedAt: 2 });
+  const viewer = new FakeSocket({ userId: 'u2', name: 'Two', avatarUrl: null, role: 'viewer', joinedAt: 3 });
+  const room = new ProjectCollaborationRoom({ getWebSockets: () => [first, second, viewer] });
+
+  assert.deepEqual(room.participants(), [
+    { id: 'u1', name: 'One', avatarUrl: null, role: 'owner', joinedAt: 1, connections: 2 },
+    { id: 'u2', name: 'Two', avatarUrl: null, role: 'viewer', joinedAt: 3, connections: 1 }
+  ]);
+  await room.webSocketMessage(viewer, JSON.stringify({ type: 'presence:request' }));
+  assert.equal(viewer.messages.at(-1).type, 'presence');
+  assert.equal(viewer.messages.at(-1).participants.length, 2);
+  await room.webSocketMessage(first, JSON.stringify({ type: 'ping' }));
+  assert.equal(first.messages.at(-1).type, 'pong');
+  await room.webSocketClose(viewer);
+  assert.equal(first.messages.at(-1).action, 'leave');
+  assert.equal(first.messages.at(-1).participants.length, 1);
 });

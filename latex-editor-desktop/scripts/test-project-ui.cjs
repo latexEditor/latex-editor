@@ -10,6 +10,7 @@ const { registerIpc } = require('../src/main/ipc');
 const { HistoryManager } = require('../src/main/HistoryManager');
 const { AuthManager } = require('../src/main/AuthManager');
 const { CloudSyncManager } = require('../src/main/CloudSyncManager');
+const { PresenceWindowManager } = require('../src/main/PresenceWindowManager');
 const { registerFeatureIpc } = require('../src/main/featureIpc');
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'latex-editor-ui-'));
@@ -22,6 +23,7 @@ const manager = new WorkspaceManager({
 });
 manager.initialize();
 let window;
+let presenceManager;
 let activeProject = null;
 let overlayOpen = false;
 let choosingCount = 0;
@@ -30,7 +32,8 @@ const errors = [];
 const history = new HistoryManager({ historyDir: path.join(root, 'history') });
 const auth = new AuthManager({ apiUrl: '', sessionFile: path.join(root, 'session.bin') }, { safeStorage, openExternal: async () => {}, onChange: () => { if (window) notify(); } });
 const cloud = new CloudSyncManager({ cloudDir: path.join(root, 'cloud') }, { auth, history, workspace: manager });
-const state = () => ({ phase: 'ready', project: activeProject, openProjects: manager.listOpenProjects(), projectsDir: manager.projectsDir, auth: auth.status() });
+let collaboration = { enabled: false, connection: 'offline', participants: [], error: null };
+const state = () => ({ phase: 'ready', project: activeProject, openProjects: manager.listOpenProjects(), projectsDir: manager.projectsDir, auth: auth.status(), collaboration });
 const notify = () => window.webContents.send('latex:state-changed', state());
 shell.openPath = async (location) => { revealed.push(location); return ''; };
 dialog.showOpenDialog = async () => { choosingCount += 1; return { canceled: true, filePaths: [] }; };
@@ -49,6 +52,7 @@ registerIpc({
   closeProject: async (location) => { activeProject = manager.closeProject(location); notify(); },
   hideEditor: () => { overlayOpen = true; },
   showEditor: () => { overlayOpen = false; },
+  togglePresencePopover: (anchor) => presenceManager.toggle(anchor),
   getState: state
 });
 
@@ -87,6 +91,10 @@ async function run() {
       offscreen: true, backgroundThrottling: false
     }
   });
+  presenceManager = new PresenceWindowManager(window, () => ({
+    participants: collaboration.participants,
+    currentUserId: auth.status().user?.id || null
+  }));
   window.webContents.on('console-message', (details) => {
     if (details.level === 'error') errors.push(details.message);
   });
@@ -205,6 +213,27 @@ async function run() {
   assert.equal(auth.status().user.email, 'ui@example.test');
   await click('#cloud-upload');
   await waitForPage(() => document.querySelectorAll('.cloud-project').length === 1 && document.querySelector('#account-feedback').textContent.includes('đồng bộ'), 'upload history to cloud');
+  collaboration = {
+    enabled: true,
+    connection: 'online',
+    error: null,
+    participants: [
+      { id: auth.status().user.id, name: 'UI Test User', role: 'owner', avatarUrl: null },
+      { id: 'google-invitee', name: 'Invitee User', role: 'editor', avatarUrl: null }
+    ]
+  };
+  notify();
+  await waitForPage(() => document.querySelector('#presence-label').textContent === '2 online', 'online presence count');
+  await click('#presence-status');
+  await waitForPage(() => document.querySelector('#presence-status').getAttribute('aria-expanded') === 'true', 'online members popover');
+  await waitFor(() => presenceManager.window && !presenceManager.window.isDestroyed(), 'native online members popover');
+  assert.equal(await presenceManager.window.webContents.executeJavaScript("document.querySelectorAll('.person').length"), 2);
+  assert.equal(await presenceManager.window.webContents.executeJavaScript("document.querySelectorAll('.you').length"), 1);
+  assert.deepEqual(await presenceManager.window.webContents.executeJavaScript("[...document.querySelectorAll('.role')].map((item) => item.textContent)"), ['Chủ sở hữu', 'Chỉnh sửa']);
+  presenceManager.window.close();
+  await waitForPage(() => document.querySelector('#presence-status').getAttribute('aria-expanded') === 'false', 'close online members popover');
+  collaboration = { enabled: false, connection: 'offline', participants: [], error: null };
+  notify();
   await capture('account-cloud');
 
   // Exercise the actual sharing dialog with a second account against the
@@ -368,6 +397,7 @@ async function finish(code) {
   if (window && !window.isDestroyed()) window.destroy();
   window = null;
   auth.dispose();
+  presenceManager?.dispose();
   // Electron may still hold its cache files; remove only our project fixtures.
   for (const fixture of [manager.projectsDir, manager.settingsFile, history.root]) {
     try { await fs.promises.rm(fixture, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }); }

@@ -8,6 +8,8 @@ const { registerIpc } = require('./ipc');
 const { HistoryManager } = require('./HistoryManager');
 const { AuthManager } = require('./AuthManager');
 const { CloudSyncManager } = require('./CloudSyncManager');
+const { CollaborationManager } = require('./CollaborationManager');
+const { PresenceWindowManager } = require('./PresenceWindowManager');
 const { registerFeatureIpc } = require('./featureIpc');
 
 const TOPBAR_HEIGHT = 38;
@@ -17,6 +19,8 @@ let serverManager;
 let workspaceManager;
 let runtimeManager;
 let authManager;
+let collaborationManager;
+let presenceWindowManager;
 let activeProject;
 let serverUrl;
 let quitting = false;
@@ -30,6 +34,7 @@ function state() {
     openProjects: workspaceManager?.listOpenProjects() || [],
     projectsDir: workspaceManager?.projectsDir || '',
     auth: authManager?.status() || { configured: false, signedIn: false },
+    collaboration: collaborationManager?.status() || { enabled: false, connection: 'offline', participants: [], error: null },
     serverUrl: serverUrl?.toString() || null
   };
 }
@@ -126,6 +131,7 @@ async function applyEditorCustomizations() {
 
 async function loadProject(projectPath) {
   if (!projectPath) {
+    collaborationManager?.close();
     activeProject = null;
     hideEditor();
     notifyState();
@@ -136,6 +142,7 @@ async function loadProject(projectPath) {
   await editorView.webContents.loadURL(target.toString());
   await applyEditorCustomizations();
   showEditor();
+  collaborationManager?.open(activeProject.path).catch(() => {});
   notifyState();
   return activeProject;
 }
@@ -202,9 +209,17 @@ async function startup() {
   serverManager = new CodeServerManager(config);
   workspaceManager.initialize();
   const history = new HistoryManager(config);
-  authManager = new AuthManager(config, { safeStorage, openExternal: (url) => shell.openExternal(url), onChange: notifyState });
+  authManager = new AuthManager(config, {
+    safeStorage,
+    openExternal: (url) => shell.openExternal(url),
+    onChange: () => {
+      collaborationManager?.open(activeProject?.path || null).catch(() => {});
+      notifyState();
+    }
+  });
   await authManager.initialize();
   const cloud = new CloudSyncManager(config, { auth: authManager, history, workspace: workspaceManager });
+  collaborationManager = new CollaborationManager({ auth: authManager, cloud, onChange: notifyState });
   registerFeatureIpc({ ipcMain, dialog, workspace: workspaceManager, history, auth: authManager, cloud, openProject: loadProject });
   const restoredProjects = workspaceManager.listOpenProjects();
   const mostRecentOpenProject = workspaceManager.listRecent().find((recentProject) => (
@@ -223,10 +238,15 @@ async function startup() {
     closeProject: closeProjectTab,
     hideEditor: () => { shellOverlayOpen = true; hideEditor(); },
     showEditor: () => { shellOverlayOpen = false; showEditor(); },
+    togglePresencePopover: (anchor) => presenceWindowManager?.toggle(anchor) || false,
     getState: state
   });
   session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
   await createWindow();
+  presenceWindowManager = new PresenceWindowManager(mainWindow, () => ({
+    participants: collaborationManager?.status().participants || [],
+    currentUserId: authManager?.status().user?.id || null
+  }));
   await serverManager.start();
   await serverManager.waitUntilReady();
   serverUrl = new URL(`http://${config.host}:${serverManager.port}`);
@@ -237,6 +257,8 @@ async function shutdown() {
   if (quitting) return;
   quitting = true;
   authManager?.dispose();
+  collaborationManager?.dispose();
+  presenceWindowManager?.dispose();
   await Promise.allSettled([serverManager?.stop()]);
 }
 

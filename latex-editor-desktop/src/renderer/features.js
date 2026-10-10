@@ -3,6 +3,8 @@
   const $ = (selector) => document.querySelector(selector);
   const historyDialog = $('#history-dialog');
   const accountDialog = $('#account-dialog');
+  const presenceWrap = $('#presence-wrap');
+  const presenceButton = $('#presence-status');
   const shareDialog = $('#share-dialog');
   let state = { project: null };
   let historyProject;
@@ -11,6 +13,7 @@
   let historyBusy = false;
   let cloudBusy = false;
   let shareBusy = false;
+
   let selectionRequest = 0;
 
   function feedback(selector, message, error = false) {
@@ -546,8 +549,34 @@
     const canUse = Boolean(next.project && next.phase === 'ready');
     $('#history-button').disabled = !canUse;
     $('#share-button').disabled = !canUse;
+    const collaboration = next.collaboration || { enabled: false, connection: 'offline', participants: [] };
+    const visible = Boolean(next.project && collaboration.enabled);
+    presenceWrap.hidden = !visible;
+    presenceButton.classList.toggle('connecting', collaboration.connection === 'connecting');
+    presenceButton.classList.toggle('error', ['error', 'revoked'].includes(collaboration.connection));
+    const people = collaboration.participants || [];
+    $('#presence-label').textContent = collaboration.connection === 'connecting'
+      ? 'Đang nối…'
+      : collaboration.connection === 'revoked'
+        ? 'Mất quyền'
+        : collaboration.connection === 'online'
+          ? `${people.length} online`
+          : 'Mất kết nối';
+    presenceButton.title = collaboration.error || (people.length
+      ? people.map((person) => `${person.name} (${person.role})`).join('\n')
+      : 'Chưa có thành viên online');
+    if (!visible) presenceButton.setAttribute('aria-expanded', 'false');
     if (next.auth) renderAuth(next.auth);
   }
+
+  presenceButton.addEventListener('click', async () => {
+    const rect = presenceButton.getBoundingClientRect();
+    const open = await api.togglePresencePopover({ left: rect.left, right: rect.right, bottom: rect.bottom });
+    presenceButton.setAttribute('aria-expanded', String(open));
+  });
+  api.onPresencePopoverClosed(() => {
+    presenceButton.setAttribute('aria-expanded', 'false');
+  });
   api.onStateChanged(update);
   api.getState().then(update).catch((error) => feedback('#account-feedback', error.message, true));
 })();

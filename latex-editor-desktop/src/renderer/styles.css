@@ -163,6 +163,13 @@ button.primary:hover { background: #2563eb; }
   line-height: 1;
   transform: translateY(2px);
 }
+
+.presence-wrap { position: relative; display: flex; align-items: center; }
+.presence-wrap[hidden] { display: none; }
+.presence-status { cursor: pointer; }
+.presence-pulse { width: 8px; height: 8px; border-radius: 50%; background: #10b981; box-shadow: 0 0 0 3px #10b9811f; }
+.presence-status.connecting .presence-pulse { background: #f59e0b; }
+.presence-status.error .presence-pulse { background: #ef4444; }
 .spacer { flex: 1; }
 
 /* Status */

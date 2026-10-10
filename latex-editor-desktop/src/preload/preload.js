@@ -12,6 +12,12 @@ contextBridge.exposeInMainWorld('latexEditor', {
   closeProject: (projectPath) => ipcRenderer.invoke('latex:close-project', projectPath),
   hideEditor: () => ipcRenderer.invoke('latex:hide-editor'),
   showEditor: () => ipcRenderer.invoke('latex:show-editor'),
+  togglePresencePopover: (anchor) => ipcRenderer.invoke('latex:toggle-presence-popover', anchor),
+  onPresencePopoverClosed: (callback) => {
+    const listener = () => callback();
+    ipcRenderer.on('latex:presence-popover-closed', listener);
+    return () => ipcRenderer.removeListener('latex:presence-popover-closed', listener);
+  },
   getRuntimeStatus: () => ipcRenderer.invoke('latex:get-runtime-status'),
   historyList: (project) => ipcRenderer.invoke('latex:history-list', project),
   historySave: (project, message) => ipcRenderer.invoke('latex:history-save', project, message),

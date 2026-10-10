@@ -57,7 +57,7 @@ npm exec --yes --package=node@22 --package=wrangler@4.120.0 -- wrangler deploy -
 npm exec --yes --package=node@22 --package=wrangler@4.120.0 -- wrangler deploy
 ```
 
-Giữ các binding `PROJECTS`, `AUTH_RATE_LIMITER`, `PROJECT_RATE_LIMITER` trong `wrangler.toml`. Backend từ chối yêu cầu khi thiếu binding giới hạn tần suất; không tắt kiểm tra để chạy production.
+Giữ các binding `PROJECTS`, `DB`, `COLLABORATION_ROOMS`, `AUTH_RATE_LIMITER`, `PROJECT_RATE_LIMITER` trong `wrangler.toml`. `COLLABORATION_ROOMS` dùng migration SQLite `v1`; lần deploy đầu sẽ tạo lớp Durable Object cho phòng cộng tác theo từng project. Backend từ chối yêu cầu khi thiếu binding giới hạn tần suất; không tắt kiểm tra để chạy production.
 
 Mở `https://YOUR-WORKER.workers.dev/health` để kiểm tra service/protocol và `configured`. Health không thay thế việc xác minh Google redirect URI/consent screen. Sau đó đặt `LATEX_EDITOR_API_URL` trong terminal khởi động desktop như [hướng dẫn desktop](../latex-editor-desktop/README.md).
 
@@ -92,7 +92,7 @@ Không dùng `workers.dev` làm domain người gửi. Nếu binding hoặc `EMA
 
 | Route | Chức năng |
 | --- | --- |
-| `GET /health` | Trạng thái cấu hình cloud và email |
+| `GET /health` | Trạng thái cấu hình cloud, email và cộng tác |
 | `GET /invite/:id` | Trang hướng dẫn mở mã lời mời trong desktop |
 | `GET /auth/google/start`, `GET /auth/google/callback` | Luồng Google OAuth |
 | `POST /auth/exchange` | Đổi mã một lần + PKCE lấy phiên |
@@ -101,6 +101,8 @@ Không dùng `workers.dev` làm domain người gửi. Nếu binding hoặc `EMA
 | `GET /v1/projects/:id/meta` | Manifest + ETag |
 | `GET /v1/projects/:id` | Tải bundle |
 | `PUT /v1/projects/:id` | Tải lên có `If-Match` hoặc `If-None-Match: *` |
+| `GET /v1/projects/:id/collaboration` | WebSocket room đã xác thực; presence theo thời gian thực |
+| `GET /v1/projects/:id/collaboration/presence` | Danh sách thành viên đang online |
 | `GET /v1/projects/:id/members` | Danh sách thành viên và quyền |
 | `POST /v1/projects/:id/invite` | Tạo lời mời email hoặc link |
 | `GET /v1/projects/:id/invitations` | Danh sách lời mời của project |

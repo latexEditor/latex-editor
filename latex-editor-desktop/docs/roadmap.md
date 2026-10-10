@@ -27,8 +27,8 @@
 
 ## Đợt 3 — Cộng tác thời gian thực
 
-- [ ] Phiên project dùng Durable Objects + WebSocket, hợp nhất nội dung với Yjs.
-- [ ] Extension code-server kết nối nội dung editor, con trỏ và trạng thái online.
+- [~] Phiên project dùng Durable Objects + WebSocket: đã có room theo project, xác thực thành viên, presence và ngắt kết nối khi thu hồi quyền; còn hợp nhất nội dung với Yjs.
+- [~] Desktop kết nối room và hiển thị người đang online; còn extension code-server để gửi thay đổi editor/con trỏ.
 - [ ] Đồng bộ tạo/xóa/đổi tên file, lưu nội dung và phục hồi sau mất kết nối.
 - [ ] Phân biệt bản nháp cộng tác với snapshot lịch sử; không ghi đè phiên đang sửa bằng Git bundle cũ.
 - [ ] Thử nghiệm hai người sửa cùng dòng; thu hồi quyền và kết nối lại.

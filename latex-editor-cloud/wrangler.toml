@@ -15,6 +15,14 @@ binding = "DB"
 database_name = "latex-editor-db"
 database_id = "2ba8fe4b-7487-4b4a-8276-b3551a420150"
 
+[[durable_objects.bindings]]
+name = "COLLABORATION_ROOMS"
+class_name = "ProjectCollaborationRoom"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ProjectCollaborationRoom"]
+
 [[ratelimits]]
 name = "AUTH_RATE_LIMITER"
 namespace_id = "1001"
