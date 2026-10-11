@@ -1,4 +1,35 @@
-const MAX_MESSAGE_BYTES = 16 * 1024;
+import * as Y from 'yjs';
+
+const MAX_MESSAGE_BYTES = 1536 * 1024;
+const MAX_UPDATE_BYTES = 1024 * 1024;
+const MAX_MANIFEST_ENTRIES = 5000;
+const DOCUMENT_PREFIX = 'document:';
+const MANIFEST_KEY = 'manifest:v1';
+const MAX_RECENT_OPERATIONS = 256;
+
+function validPath(value) {
+  return typeof value === 'string' && value.length > 0 && value.length <= 500 && !value.startsWith('/')
+    && !value.split('/').some((part) => !part || part === '.' || part === '..');
+}
+
+function validOperationId(value) {
+  return typeof value === 'string' && /^[A-Za-z0-9_-]{10,100}$/.test(value);
+}
+
+function encodeUpdate(update) {
+  let binary = '';
+  for (let offset = 0; offset < update.length; offset += 0x8000) {
+    binary += String.fromCharCode(...update.subarray(offset, offset + 0x8000));
+  }
+  return btoa(binary);
+}
+
+function decodeUpdate(value) {
+  if (typeof value !== 'string' || value.length > MAX_UPDATE_BYTES * 2) throw new Error('invalid_update');
+  const binary = atob(value);
+  if (binary.length > MAX_UPDATE_BYTES) throw new Error('update_too_large');
+  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+}
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -60,6 +91,53 @@ export class ProjectCollaborationRoom {
     for (const socket of this.sockets()) {
       if (socket !== excludedSocket) this.send(socket, message);
     }
+  }
+
+  async document(path) {
+    const saved = await this.state.storage.get(DOCUMENT_PREFIX + path);
+    const doc = new Y.Doc();
+    if (saved) Y.applyUpdate(doc, new Uint8Array(saved));
+    return { doc, saved: Boolean(saved) };
+  }
+
+  async manifest() {
+    const saved = await this.state.storage.get(MANIFEST_KEY);
+    if (!saved) return { revision: 0, entries: {}, operations: {} };
+    try {
+      const value = typeof saved === 'string' ? saved : new TextDecoder().decode(new Uint8Array(saved));
+      const manifest = JSON.parse(value);
+      if (!manifest || !Number.isSafeInteger(manifest.revision) || !manifest.entries) return { revision: 0, entries: {}, operations: {} };
+      manifest.operations = manifest.operations && typeof manifest.operations === 'object' ? manifest.operations : {};
+      return manifest;
+    } catch {
+      return { revision: 0, entries: {}, operations: {} };
+    }
+  }
+
+  rememberOperation(manifest, operationId) {
+    if (!validOperationId(operationId)) return;
+    manifest.operations ||= {};
+    manifest.operations[operationId] = manifest.revision;
+    const ids = Object.keys(manifest.operations);
+    for (const id of ids.slice(0, Math.max(0, ids.length - MAX_RECENT_OPERATIONS))) delete manifest.operations[id];
+  }
+
+  acknowledgeFile(socket, event, manifest, accepted = true, code = null) {
+    this.send(socket, {
+      type: 'file:ack', operationId: validOperationId(event.operationId) ? event.operationId : null,
+      revision: manifest.revision, accepted, ...(code ? { code } : {})
+    });
+  }
+
+  async saveManifest(manifest) {
+    await this.state.storage.put(MANIFEST_KEY, new TextEncoder().encode(JSON.stringify(manifest)));
+  }
+
+  manifestState(manifest) {
+    return {
+      type: 'filesystem:state', revision: manifest.revision,
+      entries: Object.entries(manifest.entries).map(([path, entry]) => ({ path, deleted: Boolean(entry.deleted) }))
+    };
   }
 
   async fetch(request) {
@@ -128,6 +206,201 @@ export class ProjectCollaborationRoom {
     }
     if (event?.type === 'presence:request') {
       this.send(socket, { type: 'presence', action: 'snapshot', participants: this.participants() });
+      return;
+    }
+    if (event?.type === 'manifest:subscribe' && Array.isArray(event.paths)) {
+      const identity = connectionState(socket);
+      const paths = [...new Set(event.paths.filter(validPath))].slice(0, 5000);
+      let manifest = await this.manifest();
+      if (!manifest.revision && identity && identity.role !== 'viewer') {
+        manifest = {
+          revision: 1,
+          entries: Object.fromEntries(paths.map((path) => [path, { deleted: false, changedAt: Date.now() }])),
+          operations: {}
+        };
+        await this.saveManifest(manifest);
+      }
+      this.send(socket, this.manifestState(manifest));
+      return;
+    }
+    if (event?.type === 'file:create' && validPath(event.path)) {
+      const identity = connectionState(socket);
+      if (!identity || identity.role === 'viewer') {
+        this.acknowledgeFile(socket, event, { revision: 0 }, false, 'read_only');
+        return;
+      }
+      const manifest = await this.manifest();
+      if (validOperationId(event.operationId) && Object.hasOwn(manifest.operations, event.operationId)) {
+        this.acknowledgeFile(socket, event, manifest);
+        return;
+      }
+      if (manifest.entries[event.path]?.deleted === false) {
+        this.rememberOperation(manifest, event.operationId);
+        await this.saveManifest(manifest);
+        this.acknowledgeFile(socket, event, manifest);
+        return;
+      }
+      if (!manifest.entries[event.path] && Object.keys(manifest.entries).length >= MAX_MANIFEST_ENTRIES) {
+        this.acknowledgeFile(socket, event, manifest, false, 'manifest_full');
+        return;
+      }
+      manifest.revision += 1;
+      manifest.entries[event.path] = { deleted: false, changedAt: Date.now() };
+      this.rememberOperation(manifest, event.operationId);
+      await this.saveManifest(manifest);
+      this.broadcast({ type: 'file:create', path: event.path, revision: manifest.revision }, socket);
+      this.acknowledgeFile(socket, event, manifest);
+      return;
+    }
+    if (event?.type === 'file:delete' && validPath(event.path)) {
+      const identity = connectionState(socket);
+      if (!identity || identity.role === 'viewer') {
+        this.acknowledgeFile(socket, event, { revision: 0 }, false, 'read_only');
+        return;
+      }
+      const manifest = await this.manifest();
+      if (validOperationId(event.operationId) && Object.hasOwn(manifest.operations, event.operationId)) {
+        this.acknowledgeFile(socket, event, manifest);
+        return;
+      }
+      if (manifest.entries[event.path]?.deleted === true) {
+        this.rememberOperation(manifest, event.operationId);
+        await this.saveManifest(manifest);
+        this.acknowledgeFile(socket, event, manifest);
+        return;
+      }
+      manifest.revision += 1;
+      manifest.entries[event.path] = { deleted: true, changedAt: Date.now() };
+      this.rememberOperation(manifest, event.operationId);
+      await this.saveManifest(manifest);
+      await this.state.storage.delete?.(DOCUMENT_PREFIX + event.path);
+      this.broadcast({ type: 'file:delete', path: event.path, revision: manifest.revision }, socket);
+      this.acknowledgeFile(socket, event, manifest);
+      return;
+    }
+    if (event?.type === 'file:rename' && validPath(event.oldPath) && validPath(event.newPath)
+      && event.oldPath !== event.newPath) {
+      const identity = connectionState(socket);
+      if (!identity || identity.role === 'viewer') {
+        this.acknowledgeFile(socket, event, { revision: 0 }, false, 'read_only');
+        return;
+      }
+      const manifest = await this.manifest();
+      if (validOperationId(event.operationId) && Object.hasOwn(manifest.operations, event.operationId)) {
+        this.acknowledgeFile(socket, event, manifest);
+        return;
+      }
+      if (manifest.entries[event.oldPath]?.deleted === true
+        && manifest.entries[event.newPath]?.deleted === false) {
+        this.rememberOperation(manifest, event.operationId);
+        await this.saveManifest(manifest);
+        this.acknowledgeFile(socket, event, manifest);
+        return;
+      }
+      if (manifest.entries[event.oldPath]?.deleted === true) {
+        this.acknowledgeFile(socket, event, manifest, false, 'file_missing');
+        return;
+      }
+      if (manifest.entries[event.newPath]?.deleted === false) {
+        this.acknowledgeFile(socket, event, manifest, false, 'file_exists');
+        return;
+      }
+      if (!manifest.entries[event.newPath] && Object.keys(manifest.entries).length >= MAX_MANIFEST_ENTRIES) {
+        this.acknowledgeFile(socket, event, manifest, false, 'manifest_full');
+        return;
+      }
+      manifest.revision += 1;
+      const changedAt = Date.now();
+      manifest.entries[event.oldPath] = { deleted: true, changedAt };
+      manifest.entries[event.newPath] = { deleted: false, changedAt };
+      this.rememberOperation(manifest, event.operationId);
+      const existing = await this.state.storage.get(DOCUMENT_PREFIX + event.oldPath);
+      if (existing) await this.state.storage.put(DOCUMENT_PREFIX + event.newPath, existing);
+      await this.state.storage.delete?.(DOCUMENT_PREFIX + event.oldPath);
+      await this.saveManifest(manifest);
+      this.broadcast({
+        type: 'file:rename', oldPath: event.oldPath, newPath: event.newPath, revision: manifest.revision
+      }, socket);
+      this.acknowledgeFile(socket, event, manifest);
+      return;
+    }
+    if (event?.type === 'cursor:update' && validPath(event.path) && Array.isArray(event.selections)
+      && event.selections.length <= 20) {
+      const identity = connectionState(socket);
+      const selections = event.selections.map((selection) => ({
+        anchor: Number(selection.anchor), active: Number(selection.active)
+      }));
+      const validSelections = selections.every((selection) => Number.isSafeInteger(selection.anchor)
+        && selection.anchor >= 0 && selection.anchor <= MAX_UPDATE_BYTES
+        && Number.isSafeInteger(selection.active) && selection.active >= 0 && selection.active <= MAX_UPDATE_BYTES);
+      if (!identity || !validSelections) {
+        this.send(socket, { type: 'error', code: 'invalid_cursor' });
+        return;
+      }
+      this.broadcast({
+        type: 'cursor:update', path: event.path,
+        selections, user: publicUser(identity)
+      }, socket);
+      return;
+    }
+    if (event?.type === 'document:subscribe' && validPath(event.path)) {
+      const manifest = await this.manifest();
+      if (manifest.entries[event.path]?.deleted) {
+        this.send(socket, { type: 'document:missing', path: event.path });
+        return;
+      }
+      const { doc, saved } = await this.document(event.path);
+      this.send(socket, {
+        type: 'document:state', path: event.path,
+        update: saved ? encodeUpdate(Y.encodeStateAsUpdate(doc)) : null
+      });
+      return;
+    }
+    if (event?.type === 'document:update' && validPath(event.path)) {
+      const identity = connectionState(socket);
+      if (!identity || identity.role === 'viewer') {
+        this.send(socket, { type: 'error', code: 'read_only' });
+        return;
+      }
+      try {
+        const manifest = await this.manifest();
+        if (manifest.entries[event.path]?.deleted) throw new Error('document_deleted');
+        const update = decodeUpdate(event.update);
+        const { doc } = await this.document(event.path);
+        Y.applyUpdate(doc, update);
+        const state = Y.encodeStateAsUpdate(doc);
+        if (state.byteLength > MAX_UPDATE_BYTES) throw new Error('document_too_large');
+        await this.state.storage.put(DOCUMENT_PREFIX + event.path, state);
+        this.broadcast({ type: 'document:update', path: event.path, update: encodeUpdate(update) }, socket);
+      } catch (error) {
+        this.send(socket, { type: 'error', code: error.message || 'invalid_update' });
+      }
+      return;
+    }
+    if (event?.type === 'document:seed' && validPath(event.path)) {
+      const identity = connectionState(socket);
+      if (!identity || identity.role === 'viewer') {
+        this.send(socket, { type: 'error', code: 'read_only' });
+        return;
+      }
+      try {
+        const manifest = await this.manifest();
+        if (manifest.entries[event.path]?.deleted) throw new Error('document_deleted');
+        const existing = await this.state.storage.get(DOCUMENT_PREFIX + event.path);
+        if (existing) {
+          this.send(socket, { type: 'document:state', path: event.path, update: encodeUpdate(new Uint8Array(existing)) });
+          return;
+        }
+        const update = decodeUpdate(event.update);
+        const doc = new Y.Doc();
+        Y.applyUpdate(doc, update);
+        const state = Y.encodeStateAsUpdate(doc);
+        if (state.byteLength > MAX_UPDATE_BYTES) throw new Error('document_too_large');
+        await this.state.storage.put(DOCUMENT_PREFIX + event.path, state);
+        this.broadcast({ type: 'document:update', path: event.path, update: encodeUpdate(update) }, socket);
+      } catch (error) {
+        this.send(socket, { type: 'error', code: error.message || 'invalid_update' });
+      }
       return;
     }
     this.send(socket, { type: 'error', code: 'unsupported_event' });

@@ -9,6 +9,7 @@ const { HistoryManager } = require('./HistoryManager');
 const { AuthManager } = require('./AuthManager');
 const { CloudSyncManager } = require('./CloudSyncManager');
 const { CollaborationManager } = require('./CollaborationManager');
+const { CollaborationBridge } = require('./CollaborationBridge');
 const { PresenceWindowManager } = require('./PresenceWindowManager');
 const { registerFeatureIpc } = require('./featureIpc');
 
@@ -20,6 +21,7 @@ let workspaceManager;
 let runtimeManager;
 let authManager;
 let collaborationManager;
+let collaborationBridge;
 let presenceWindowManager;
 let activeProject;
 let serverUrl;
@@ -211,6 +213,12 @@ async function startup() {
   workspaceManager = new WorkspaceManager(config, { runtimeStatus });
   serverManager = new CodeServerManager(config);
   workspaceManager.initialize();
+  collaborationBridge = new CollaborationBridge({
+    onMessage: (message) => collaborationManager?.handleEditorMessage(message)
+  });
+  const bridge = await collaborationBridge.start();
+  config.collaborationBridgePort = bridge.port;
+  config.collaborationBridgeToken = bridge.token;
   let serverStartupError = null;
   const serverReady = (async () => {
     await serverManager.start();
@@ -229,7 +237,12 @@ async function startup() {
   });
   await authManager.initialize();
   const cloud = new CloudSyncManager(config, { auth: authManager, history, workspace: workspaceManager });
-  collaborationManager = new CollaborationManager({ auth: authManager, cloud, onChange: notifyState });
+  collaborationManager = new CollaborationManager({
+    auth: authManager,
+    cloud,
+    onChange: notifyState,
+    onEditorMessage: (message) => collaborationBridge?.publish(message)
+  });
   registerFeatureIpc({ ipcMain, dialog, workspace: workspaceManager, history, auth: authManager, cloud, openProject: loadProject });
   const restoredProjects = workspaceManager.listOpenProjects();
   const mostRecentOpenProject = workspaceManager.listRecent().find((recentProject) => (
@@ -269,7 +282,7 @@ async function shutdown() {
   authManager?.dispose();
   collaborationManager?.dispose();
   presenceWindowManager?.dispose();
-  await Promise.allSettled([serverManager?.stop()]);
+  await Promise.allSettled([serverManager?.stop(), collaborationBridge?.stop()]);
 }
 
 if (!hasSingleInstanceLock) {

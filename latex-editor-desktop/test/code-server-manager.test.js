@@ -61,3 +61,30 @@ test('reports recent process output when startup fails', async (t) => {
   child.emit('exit', 1, null);
   await assert.rejects(() => manager.waitUntilReady(), /extension directory is not writable/);
 });
+
+test('registers the bundled collaboration extension and passes only the local bridge credentials', async (t) => {
+  const child = fakeChild();
+  const extension = fs.mkdtempSync(path.join(os.tmpdir(), 'latex-editor-extension-'));
+  t.after(() => fs.rmSync(extension, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(extension, 'package.json'), JSON.stringify({ name: 'latex-editor-collaboration' }));
+  let spawnOptions;
+  const values = config(t, {
+    bundledCollaborationExtension: extension,
+    collaborationBridgePort: 45678,
+    collaborationBridgeToken: 'secret-token'
+  });
+  const manager = new CodeServerManager(values, quiet, {
+    spawn: (_command, _args, options) => { spawnOptions = options; return child; },
+    fetch: async () => new Response('', { status: 200 })
+  });
+  await manager.start();
+
+  const installed = path.join(values.extensionsDir, 'latex-editor.latex-editor-collaboration-0.1.0');
+  assert.equal(fs.existsSync(path.join(installed, 'package.json')), true);
+  const registry = JSON.parse(fs.readFileSync(path.join(values.extensionsDir, 'extensions.json'), 'utf8'));
+  assert.equal(registry.some((entry) => entry.identifier.id === 'latex-editor.latex-editor-collaboration'), true);
+  assert.equal(spawnOptions.env.LATEX_EDITOR_BRIDGE_PORT, '45678');
+  assert.equal(spawnOptions.env.LATEX_EDITOR_BRIDGE_TOKEN, 'secret-token');
+  child.exitCode = 0;
+  child.emit('exit', 0, null);
+});

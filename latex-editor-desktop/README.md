@@ -1,6 +1,6 @@
 # LaTeX Editor Desktop
 
-Ứng dụng Electron cloud-first để sửa, biên dịch và xem tài liệu LaTeX trong giao diện VS Code nhúng qua code-server. Project có bản làm việc local và lịch sử được đồng bộ lên R2.
+Ứng dụng Electron cloud-first để sửa, biên dịch và xem tài liệu LaTeX trong giao diện VS Code nhúng qua code-server. Project có bản làm việc local, lịch sử được đồng bộ lên R2 và cộng tác Yjs với presence, cursor/selection cùng manifest file có tombstone.
 
 ## Yêu cầu
 
@@ -25,7 +25,7 @@ npm run check:latex
 npm start
 ```
 
-Mặc định dữ liệu nằm trong `%APPDATA%\LatexEditor`. Lịch sử local dùng Git; Google login và đồng bộ R2 cần cấu hình [backend riêng](../latex-editor-cloud/README.md). Chưa hỗ trợ cộng tác thời gian thực.
+Mặc định dữ liệu nằm trong `%APPDATA%\LatexEditor`. Lịch sử local dùng Git; Google login, đồng bộ R2 và cộng tác thời gian thực cần [backend](../latex-editor-cloud/README.md).
 
 Xem thêm [docs/development.md](docs/development.md) và [docs/architecture.md](docs/architecture.md).
 
@@ -79,4 +79,4 @@ Phiên đăng nhập được mã hóa bằng Electron safeStorage trong `auth-s
 - Owner có thể mời theo email hoặc tạo mã link với quyền editor/viewer, thu hồi lời mời và xóa thành viên.
 - Mã link gồm invitation ID và token bí mật; phải sao chép toàn bộ chuỗi `id:token`. Email invitation chỉ tài khoản Google có đúng địa chỉ nhận mới chấp nhận được.
 - Khi Email Sending đã được cấu hình ở Worker, người nhận nhận email HTML/text kèm trang hướng dẫn. Nếu dịch vụ email chưa sẵn sàng, lời mời vẫn xuất hiện trong mục **Tài khoản & Cloud** sau khi người nhận đăng nhập.
-- Đây là chia sẻ snapshot qua Git bundle, chưa phải cộng tác thời gian thực.
+- Project cloud có cộng tác thời gian thực cho các file `.tex`, `.bib`, `.sty`, `.cls`, `.md`; tạo/đổi tên/xóa được đồng bộ qua manifest. Hàng đợi thao tác được lưu theo workspace, gửi lại sau khi mở app và Worker khử thao tác trùng bằng operation ID. File bị xóa từ phiên cộng tác được đưa vào Recycle Bin trên máy nhận.

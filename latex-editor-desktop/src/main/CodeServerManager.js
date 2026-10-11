@@ -1,6 +1,7 @@
 const fs = require('node:fs');
 const net = require('node:net');
 const path = require('node:path');
+const { pathToFileURL } = require('node:url');
 const { spawn } = require('node:child_process');
 const { ensureBuildOpensPdf } = require('./LatexWorkshopIntegration');
 
@@ -38,6 +39,7 @@ class CodeServerManager {
     this.recentOutput = [];
     fs.mkdirSync(this.config.appDataDir, { recursive: true });
     fs.mkdirSync(this.config.extensionsDir, { recursive: true });
+    this.#installBundledExtension();
     const integration = ensureBuildOpensPdf(this.config.extensionsDir);
     if (integration.patched) this.log.info(`Enabled Build -> PDF for ${integration.extensionMain}`);
     this.#writeGlobalSettings();
@@ -60,6 +62,10 @@ class CodeServerManager {
       stdio: ['ignore', 'pipe', 'pipe'],
       env: {
         ...process.env,
+        ...(this.config.collaborationBridgePort ? {
+          LATEX_EDITOR_BRIDGE_PORT: String(this.config.collaborationBridgePort),
+          LATEX_EDITOR_BRIDGE_TOKEN: this.config.collaborationBridgeToken
+        } : {}),
         PATH: [this.config.additionalPath, process.env.PATH].filter(Boolean).join(path.delimiter)
       }
     });
@@ -142,6 +148,44 @@ class CodeServerManager {
     const found = candidates.find((candidate) => fs.existsSync(candidate));
     if (found) return found;
     throw new Error('Không tìm thấy code-server. Hãy chạy npm run setup:code-server.');
+  }
+
+  #installBundledExtension() {
+    const source = this.config.bundledCollaborationExtension;
+    if (!source || !fs.existsSync(source)) return;
+    const folder = 'latex-editor.latex-editor-collaboration-0.1.0';
+    const target = path.join(this.config.extensionsDir, folder);
+    fs.cpSync(source, target, { recursive: true, force: true });
+
+    const obsoletePath = path.join(this.config.extensionsDir, '.obsolete');
+    try {
+      const obsolete = JSON.parse(fs.readFileSync(obsoletePath, 'utf8'));
+      if (obsolete[folder]) {
+        delete obsolete[folder];
+        if (Object.keys(obsolete).length) fs.writeFileSync(obsoletePath, JSON.stringify(obsolete), 'utf8');
+        else fs.rmSync(obsoletePath, { force: true });
+      }
+    } catch {}
+
+    const registryPath = path.join(this.config.extensionsDir, 'extensions.json');
+    let registry = [];
+    try { registry = JSON.parse(fs.readFileSync(registryPath, 'utf8')); } catch {}
+    if (!Array.isArray(registry)) registry = [];
+    const id = 'latex-editor.latex-editor-collaboration';
+    const existing = registry.find((item) => item.identifier?.id === id);
+    const url = pathToFileURL(target);
+    const entry = {
+      identifier: { id }, version: '0.1.0',
+      location: { $mid: 1, fsPath: target, _sep: 1, external: url.href, path: url.pathname, scheme: 'file' },
+      relativeLocation: folder,
+      metadata: {
+        isApplicationScoped: false, isMachineScoped: false, isBuiltin: false,
+        installedTimestamp: existing?.metadata?.installedTimestamp || Date.now(),
+        pinned: true, source: 'vsix', targetPlatform: 'universal'
+      }
+    };
+    registry = [...registry.filter((item) => item.identifier?.id !== id), entry];
+    fs.writeFileSync(registryPath, JSON.stringify(registry), 'utf8');
   }
 
   #capture(level, data) {

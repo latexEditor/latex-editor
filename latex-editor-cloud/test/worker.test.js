@@ -451,3 +451,115 @@ test('collaboration room restores presence from WebSocket attachments and handle
   assert.equal(first.messages.at(-1).action, 'leave');
   assert.equal(first.messages.at(-1).participants.length, 1);
 });
+
+test('collaboration room persists Yjs documents and rejects viewer updates', async () => {
+  const Y = await import('yjs');
+  class FakeSocket {
+    constructor(role) { this.attachment = { userId: role, name: role, role, joinedAt: 1 }; this.messages = []; }
+    deserializeAttachment() { return this.attachment; }
+    send(message) { this.messages.push(JSON.parse(message)); }
+  }
+  const values = new Map();
+  const storage = {
+    get: async (key) => values.get(key),
+    put: async (key, value) => values.set(key, new Uint8Array(value))
+  };
+  const owner = new FakeSocket('owner');
+  const viewer = new FakeSocket('viewer');
+  const state = { storage, getWebSockets: () => [owner, viewer] };
+  const room = new ProjectCollaborationRoom(state);
+  const document = new Y.Doc();
+  document.getText('content').insert(0, 'Shared');
+  const update = Buffer.from(Y.encodeStateAsUpdate(document)).toString('base64');
+
+  await room.webSocketMessage(owner, JSON.stringify({ type: 'document:seed', path: 'main.tex', update }));
+  assert.equal(values.has('document:main.tex'), true);
+  assert.equal(viewer.messages.at(-1).type, 'document:update');
+
+  const restarted = new ProjectCollaborationRoom(state);
+  await restarted.webSocketMessage(viewer, JSON.stringify({ type: 'document:subscribe', path: 'main.tex' }));
+  assert.equal(viewer.messages.at(-1).type, 'document:state');
+  assert.ok(viewer.messages.at(-1).update);
+  await restarted.webSocketMessage(viewer, JSON.stringify({ type: 'document:update', path: 'main.tex', update }));
+  assert.equal(viewer.messages.at(-1).code, 'read_only');
+});
+
+test('collaboration room broadcasts validated cursor selections without persisting them', async () => {
+  class FakeSocket {
+    constructor(id, role) { this.attachment = { userId: id, name: id, role, joinedAt: 1 }; this.messages = []; }
+    deserializeAttachment() { return this.attachment; }
+    send(message) { this.messages.push(JSON.parse(message)); }
+  }
+  const owner = new FakeSocket('owner-user', 'owner');
+  const viewer = new FakeSocket('viewer-user', 'viewer');
+  let writes = 0;
+  const room = new ProjectCollaborationRoom({
+    storage: { get: async () => null, put: async () => { writes += 1; } },
+    getWebSockets: () => [owner, viewer]
+  });
+  await room.webSocketMessage(owner, JSON.stringify({
+    type: 'cursor:update', path: 'main.tex', selections: [{ anchor: 4, active: 9 }]
+  }));
+  assert.deepEqual(viewer.messages.at(-1), {
+    type: 'cursor:update', path: 'main.tex', selections: [{ anchor: 4, active: 9 }],
+    user: { id: 'owner-user', name: 'owner-user', avatarUrl: null, role: 'owner', joinedAt: 1 }
+  });
+  assert.equal(writes, 0);
+  await room.webSocketMessage(owner, JSON.stringify({ type: 'cursor:update', path: '../bad', selections: [] }));
+  assert.equal(owner.messages.at(-1).code, 'unsupported_event');
+});
+
+test('collaboration room persists a tombstoned file manifest and moves document state on rename', async () => {
+  class FakeSocket {
+    constructor(id, role) { this.attachment = { userId: id, name: id, role, joinedAt: 1 }; this.messages = []; }
+    deserializeAttachment() { return this.attachment; }
+    send(message) { this.messages.push(JSON.parse(message)); }
+  }
+  const owner = new FakeSocket('owner-user', 'owner');
+  const viewer = new FakeSocket('viewer-user', 'viewer');
+  const values = new Map([['document:old.tex', new Uint8Array([1, 2, 3])]]);
+  const storage = {
+    get: async (key) => values.get(key),
+    put: async (key, value) => values.set(key, value),
+    delete: async (key) => values.delete(key)
+  };
+  const room = new ProjectCollaborationRoom({ storage, getWebSockets: () => [owner, viewer] });
+
+  await room.webSocketMessage(owner, JSON.stringify({ type: 'manifest:subscribe', paths: ['main.tex', 'old.tex'] }));
+  assert.equal(owner.messages.at(-1).type, 'filesystem:state');
+  assert.equal(owner.messages.at(-1).revision, 1);
+  await room.webSocketMessage(owner, JSON.stringify({
+    type: 'file:rename', oldPath: 'old.tex', newPath: 'new.tex', operationId: 'rename-operation-1'
+  }));
+  assert.equal(viewer.messages.at(-1).type, 'file:rename');
+  assert.deepEqual(values.get('document:new.tex'), new Uint8Array([1, 2, 3]));
+  assert.equal(values.has('document:old.tex'), false);
+  const revisionAfterRename = owner.messages.at(-1).revision;
+  await room.webSocketMessage(owner, JSON.stringify({
+    type: 'file:rename', oldPath: 'old.tex', newPath: 'new.tex', operationId: 'rename-operation-1'
+  }));
+  assert.equal(owner.messages.at(-1).type, 'file:ack');
+  assert.equal(owner.messages.at(-1).revision, revisionAfterRename);
+  await room.webSocketMessage(owner, JSON.stringify({
+    type: 'file:create', path: 'occupied.tex', operationId: 'create-operation-1'
+  }));
+  await room.webSocketMessage(owner, JSON.stringify({
+    type: 'file:rename', oldPath: 'main.tex', newPath: 'occupied.tex', operationId: 'rename-operation-2'
+  }));
+  assert.equal(owner.messages.at(-1).code, 'file_exists');
+  await room.webSocketMessage(owner, JSON.stringify({
+    type: 'file:delete', path: 'new.tex', operationId: 'delete-operation-1'
+  }));
+  assert.equal(values.has('document:new.tex'), false);
+
+  const restarted = new ProjectCollaborationRoom({ storage, getWebSockets: () => [owner, viewer] });
+  await restarted.webSocketMessage(owner, JSON.stringify({ type: 'manifest:subscribe', paths: ['new.tex'] }));
+  const manifest = owner.messages.at(-1);
+  assert.equal(manifest.type, 'filesystem:state');
+  assert.equal(manifest.entries.find((entry) => entry.path === 'old.tex').deleted, true);
+  assert.equal(manifest.entries.find((entry) => entry.path === 'new.tex').deleted, true);
+  await restarted.webSocketMessage(viewer, JSON.stringify({
+    type: 'file:create', path: 'blocked.tex', operationId: 'viewer-operation-1'
+  }));
+  assert.equal(viewer.messages.at(-1).code, 'read_only');
+});

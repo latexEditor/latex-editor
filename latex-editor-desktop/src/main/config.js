@@ -14,6 +14,7 @@ module.exports = {
   auth: 'none',
   appDataDir: path.join(appDataRoot, 'code-server-data'),
   extensionsDir: path.join(appDataRoot, 'extensions'),
+  bundledCollaborationExtension: path.join(rootDir, 'resources', 'extensions', 'latex-editor-collaboration'),
   projectsDir: process.env.LATEX_EDITOR_PROJECTS_DIR || path.join(appDataRoot, 'projects'),
   settingsFile: path.join(appDataRoot, 'settings.json'),
   historyDir: path.join(appDataRoot, 'history'),

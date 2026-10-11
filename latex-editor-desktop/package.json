@@ -20,5 +20,8 @@
   },
   "devDependencies": {
     "electron": "43.2.0"
+  },
+  "dependencies": {
+    "yjs": "^13.6.33"
   }
 }

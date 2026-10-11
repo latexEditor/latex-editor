@@ -27,9 +27,9 @@
 
 ## Đợt 3 — Cộng tác thời gian thực
 
-- [~] Phiên project dùng Durable Objects + WebSocket: đã có room theo project, xác thực thành viên, presence và ngắt kết nối khi thu hồi quyền; còn hợp nhất nội dung với Yjs.
-- [~] Desktop kết nối room và hiển thị người đang online; còn extension code-server để gửi thay đổi editor/con trỏ.
-- [ ] Đồng bộ tạo/xóa/đổi tên file, lưu nội dung và phục hồi sau mất kết nối.
+- [~] Phiên project dùng Durable Objects + WebSocket: room theo project xác thực thành viên, presence, cursor/selection, ngắt kết nối khi thu hồi quyền và lưu draft Yjs theo file; còn dọn draft theo lifecycle.
+- [x] Desktop kết nối room, hiển thị người online, cursor/selection và extension code-server đồng bộ nội dung `.tex/.bib/.sty/.cls/.md`; viewer bị chặn ghi và client tự kết nối lại với exponential backoff.
+- [x] Đồng bộ tạo/xóa/đổi tên file qua manifest có revision và tombstone; hàng đợi thao tác lưu trong workspace state, gửi lại sau khi mở app và chỉ xóa khi Worker ACK theo operation ID.
 - [ ] Phân biệt bản nháp cộng tác với snapshot lịch sử; không ghi đè phiên đang sửa bằng Git bundle cũ.
 - [ ] Thử nghiệm hai người sửa cùng dòng; thu hồi quyền và kết nối lại.
 
