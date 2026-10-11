@@ -1,6 +1,10 @@
 const fs = require('node:fs');
 const path = require('node:path');
+const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
+
+const POSITIVE_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const NEGATIVE_CACHE_TTL_MS = 5 * 60 * 1000;
 
 class LatexRuntimeManager {
   constructor(dependencies = {}) {
@@ -8,15 +12,26 @@ class LatexRuntimeManager {
     this.fs = dependencies.fs || fs;
     this.platform = dependencies.platform || process.platform;
     this.env = dependencies.env || process.env;
+    this.cacheFile = dependencies.cacheFile || null;
+    this.now = dependencies.now || Date.now;
+    this.status = null;
   }
 
-  getStatus() {
+  getStatus(options = {}) {
+    if (!options.refresh && this.status) return this.status;
+    if (!options.refresh) {
+      const cached = this.#readCache();
+      if (cached) {
+        this.status = cached;
+        return cached;
+      }
+    }
     this.supportPaths = this.#findSupportPaths();
     const tools = ['latexmk', 'pdflatex', 'xelatex'].map((name) => this.#find(name));
     const available = tools.filter((tool) => tool.available);
     const distribution = this.#distribution(available);
     const canBuild = tools.some((tool) => ['latexmk', 'pdflatex', 'xelatex'].includes(tool.name) && tool.usable);
-    return {
+    this.status = {
       available: available.length > 0,
       canBuild,
       distribution,
@@ -31,6 +46,50 @@ class LatexRuntimeManager {
           ? 'Đã tìm thấy LaTeX nhưng chưa có trình biên dịch chạy được. Hãy xem chi tiết từng công cụ.'
           : 'Hãy cài MiKTeX hoặc TeX Live, bật tùy chọn thêm công cụ LaTeX vào PATH, rồi khởi động lại ứng dụng.'
     };
+    this.#writeCache(this.status);
+    return this.status;
+  }
+
+  #environmentKey() {
+    const value = [
+      this.platform,
+      this.env.PATH || '',
+      this.env.LOCALAPPDATA || '',
+      this.env.ProgramFiles || ''
+    ].join('\0');
+    return crypto.createHash('sha256').update(value).digest('hex');
+  }
+
+  #readCache() {
+    if (!this.cacheFile || typeof this.fs.readFileSync !== 'function') return null;
+    try {
+      const cache = JSON.parse(this.fs.readFileSync(this.cacheFile, 'utf8'));
+      const maxAge = cache.status?.canBuild ? POSITIVE_CACHE_TTL_MS : NEGATIVE_CACHE_TTL_MS;
+      if (cache.version !== 1 || cache.environmentKey !== this.#environmentKey()
+        || !Number.isFinite(cache.savedAt) || this.now() - cache.savedAt > maxAge) return null;
+      if (!Array.isArray(cache.status?.tools) || !Array.isArray(cache.status?.pathEntries)) return null;
+      const pathsStillExist = cache.status.tools
+        .filter((tool) => tool.available)
+        .every((tool) => tool.path && this.fs.existsSync(tool.path));
+      return pathsStillExist ? cache.status : null;
+    } catch {
+      return null;
+    }
+  }
+
+  #writeCache(status) {
+    if (!this.cacheFile || typeof this.fs.writeFileSync !== 'function' || typeof this.fs.mkdirSync !== 'function') return;
+    try {
+      this.fs.mkdirSync(path.dirname(this.cacheFile), { recursive: true });
+      this.fs.writeFileSync(this.cacheFile, `${JSON.stringify({
+        version: 1,
+        savedAt: this.now(),
+        environmentKey: this.#environmentKey(),
+        status
+      }, null, 2)}\n`, 'utf8');
+    } catch {
+      // Runtime detection still works if the cache cannot be persisted.
+    }
   }
 
   #find(name) {

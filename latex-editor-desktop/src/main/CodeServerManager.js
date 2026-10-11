@@ -177,6 +177,9 @@ class CodeServerManager {
         'window.commandCenter': false,
         'window.customTitleBarVisibility': 'never',
         'workbench.startupEditor': 'welcomePage',
+        'extensions.autoCheckUpdates': false,
+        'extensions.autoUpdate': false,
+        'workbench.enableExperiments': false,
         'window.zoomLevel': 0
       };
 
@@ -187,7 +190,7 @@ class CodeServerManager {
         fs.writeFileSync(userSettingsPath, settingsJson, 'utf8');
       } else {
         const current = JSON.parse(fs.readFileSync(userSettingsPath, 'utf8'));
-        if (current['window.commandCenter'] !== false) {
+        if (Object.entries(settings).some(([key, value]) => current[key] !== value)) {
            fs.writeFileSync(userSettingsPath, JSON.stringify({ ...current, ...settings }, null, 2), 'utf8');
         }
       }
@@ -197,7 +200,7 @@ class CodeServerManager {
         fs.writeFileSync(machineSettingsPath, settingsJson, 'utf8');
       } else {
         const current = JSON.parse(fs.readFileSync(machineSettingsPath, 'utf8'));
-        if (current['window.commandCenter'] !== false) {
+        if (Object.entries(settings).some(([key, value]) => current[key] !== value)) {
            fs.writeFileSync(machineSettingsPath, JSON.stringify({ ...current, ...settings }, null, 2), 'utf8');
         }
       }

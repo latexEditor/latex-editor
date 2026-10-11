@@ -139,6 +139,8 @@ async function loadProject(projectPath) {
   }
   activeProject = workspaceManager.openProject(projectPath);
   const target = workspaceManager.codeServerUrl(config.host, serverManager.port, activeProject.path);
+  showEditor();
+  notifyState();
   await editorView.webContents.loadURL(target.toString());
   await applyEditorCustomizations();
   showEditor();
@@ -202,12 +204,20 @@ async function createWindow() {
 }
 
 async function startup() {
-  runtimeManager = new LatexRuntimeManager();
+  const startupStartedAt = Date.now();
+  runtimeManager = new LatexRuntimeManager({ cacheFile: config.runtimeStatusFile });
   const runtimeStatus = runtimeManager.getStatus();
   config.additionalPath = runtimeStatus.pathEntries.join(path.delimiter);
   workspaceManager = new WorkspaceManager(config, { runtimeStatus });
   serverManager = new CodeServerManager(config);
   workspaceManager.initialize();
+  let serverStartupError = null;
+  const serverReady = (async () => {
+    await serverManager.start();
+    await serverManager.waitUntilReady();
+    serverUrl = new URL(`http://${config.host}:${serverManager.port}`);
+    notifyState();
+  })().catch((error) => { serverStartupError = error; });
   const history = new HistoryManager(config);
   authManager = new AuthManager(config, {
     safeStorage,
@@ -247,10 +257,10 @@ async function startup() {
     participants: collaborationManager?.status().participants || [],
     currentUserId: authManager?.status().user?.id || null
   }));
-  await serverManager.start();
-  await serverManager.waitUntilReady();
-  serverUrl = new URL(`http://${config.host}:${serverManager.port}`);
+  await serverReady;
+  if (serverStartupError) throw serverStartupError;
   await loadProject(activeProject?.path || null);
+  console.info(`LaTeX Editor ready in ${Date.now() - startupStartedAt}ms`);
 }
 
 async function shutdown() {

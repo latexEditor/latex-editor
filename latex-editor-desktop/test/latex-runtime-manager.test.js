@@ -1,4 +1,7 @@
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const test = require('node:test');
 const { LatexRuntimeManager } = require('../src/main/LatexRuntimeManager');
 
@@ -75,4 +78,43 @@ test('returns installation guidance when compiler is absent', () => {
   const status = manager.getStatus();
   assert.equal(status.available, false);
   assert.match(status.recommendation, /MiKTeX|TeX Live/);
+});
+
+test('reuses an in-memory result instead of probing the runtime twice', () => {
+  let probes = 0;
+  const manager = new LatexRuntimeManager({
+    platform: 'linux',
+    spawnSync: () => { probes += 1; return { status: 1, stdout: '' }; },
+    fs: { existsSync: () => false }, env: {}
+  });
+  manager.getStatus();
+  manager.getStatus();
+  assert.equal(probes, 3);
+});
+
+test('loads a valid runtime result from the persistent cache on restart', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'latex-runtime-cache-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const cacheFile = path.join(root, 'runtime-status.json');
+  const executable = path.join(root, 'pdflatex');
+  fs.writeFileSync(executable, 'fixture');
+  const env = { PATH: root };
+  let probes = 0;
+  const first = new LatexRuntimeManager({
+    cacheFile, platform: 'linux', env,
+    spawnSync: (_command, [argument]) => {
+      probes += 1;
+      return argument === 'pdflatex'
+        ? { status: 0, stdout: `${executable}\n` }
+        : { status: 1, stdout: '' };
+    }
+  });
+  assert.equal(first.getStatus().canBuild, true);
+  const probesAfterFirstScan = probes;
+  const restarted = new LatexRuntimeManager({
+    cacheFile, platform: 'linux', env,
+    spawnSync: () => { probes += 1; return { status: 1, stdout: '' }; }
+  });
+  assert.equal(restarted.getStatus().canBuild, true);
+  assert.equal(probes, probesAfterFirstScan);
 });
