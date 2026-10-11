@@ -102,16 +102,37 @@ export class ProjectCollaborationRoom {
 
   async manifest() {
     const saved = await this.state.storage.get(MANIFEST_KEY);
-    if (!saved) return { revision: 0, entries: {}, operations: {} };
+    if (!saved) return { revision: 0, entries: {}, operations: {}, pendingDraftDeletes: [] };
+    let manifest;
     try {
       const value = typeof saved === 'string' ? saved : new TextDecoder().decode(new Uint8Array(saved));
-      const manifest = JSON.parse(value);
-      if (!manifest || !Number.isSafeInteger(manifest.revision) || !manifest.entries) return { revision: 0, entries: {}, operations: {} };
-      manifest.operations = manifest.operations && typeof manifest.operations === 'object' ? manifest.operations : {};
-      return manifest;
+      manifest = JSON.parse(value);
+      if (!manifest || !Number.isSafeInteger(manifest.revision) || !manifest.entries) return { revision: 0, entries: {}, operations: {}, pendingDraftDeletes: [] };
     } catch {
-      return { revision: 0, entries: {}, operations: {} };
+      return { revision: 0, entries: {}, operations: {}, pendingDraftDeletes: [] };
     }
+    manifest.operations = manifest.operations && typeof manifest.operations === 'object' ? manifest.operations : {};
+    manifest.pendingDraftDeletes = Array.isArray(manifest.pendingDraftDeletes)
+      ? [...new Set(manifest.pendingDraftDeletes.filter(validPath))].slice(0, MAX_MANIFEST_ENTRIES)
+      : [];
+    if (manifest.pendingDraftDeletes.length) await this.cleanupDrafts(manifest);
+    return manifest;
+  }
+
+  queueDraftCleanup(manifest, paths) {
+    manifest.pendingDraftDeletes = [...new Set([...(manifest.pendingDraftDeletes || []), ...paths.filter(validPath)])]
+      .slice(-MAX_MANIFEST_ENTRIES);
+  }
+
+  async cleanupDrafts(manifest) {
+    const paths = [...new Set(manifest.pendingDraftDeletes || [])];
+    for (let offset = 0; offset < paths.length; offset += 128) {
+      const pending = paths.slice(offset, offset + 128)
+        .map((path) => this.state.storage.delete(DOCUMENT_PREFIX + path));
+      await Promise.all(pending);
+    }
+    manifest.pendingDraftDeletes = [];
+    await this.saveManifest(manifest);
   }
 
   rememberOperation(manifest, operationId) {
@@ -216,7 +237,7 @@ export class ProjectCollaborationRoom {
         manifest = {
           revision: 1,
           entries: Object.fromEntries(paths.map((path) => [path, { deleted: false, changedAt: Date.now() }])),
-          operations: {}
+          operations: {}, pendingDraftDeletes: []
         };
         await this.saveManifest(manifest);
       }
@@ -272,8 +293,9 @@ export class ProjectCollaborationRoom {
       manifest.revision += 1;
       manifest.entries[event.path] = { deleted: true, changedAt: Date.now() };
       this.rememberOperation(manifest, event.operationId);
+      this.queueDraftCleanup(manifest, [event.path]);
       await this.saveManifest(manifest);
-      await this.state.storage.delete?.(DOCUMENT_PREFIX + event.path);
+      await this.cleanupDrafts(manifest);
       this.broadcast({ type: 'file:delete', path: event.path, revision: manifest.revision }, socket);
       this.acknowledgeFile(socket, event, manifest);
       return;
@@ -316,8 +338,9 @@ export class ProjectCollaborationRoom {
       this.rememberOperation(manifest, event.operationId);
       const existing = await this.state.storage.get(DOCUMENT_PREFIX + event.oldPath);
       if (existing) await this.state.storage.put(DOCUMENT_PREFIX + event.newPath, existing);
-      await this.state.storage.delete?.(DOCUMENT_PREFIX + event.oldPath);
+      this.queueDraftCleanup(manifest, [event.oldPath]);
       await this.saveManifest(manifest);
+      await this.cleanupDrafts(manifest);
       this.broadcast({
         type: 'file:rename', oldPath: event.oldPath, newPath: event.newPath, revision: manifest.revision
       }, socket);
@@ -338,15 +361,18 @@ export class ProjectCollaborationRoom {
       const active = new Set(paths);
       const manifest = await this.manifest();
       const changedAt = Date.now();
+      const deletedPaths = [];
       for (const [path, entry] of Object.entries(manifest.entries)) {
         if (!entry.deleted && !active.has(path)) {
           manifest.entries[path] = { deleted: true, changedAt };
-          await this.state.storage.delete?.(DOCUMENT_PREFIX + path);
+          deletedPaths.push(path);
         }
       }
       for (const path of paths) manifest.entries[path] = { deleted: false, changedAt };
       manifest.revision += 1;
+      this.queueDraftCleanup(manifest, deletedPaths);
       await this.saveManifest(manifest);
+      await this.cleanupDrafts(manifest);
       this.broadcast(this.manifestState(manifest), socket);
       this.send(socket, { type: 'filesystem:reset:ack', requestId: event.requestId, revision: manifest.revision });
       return;

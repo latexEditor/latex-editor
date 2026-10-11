@@ -484,6 +484,53 @@ test('collaboration room persists Yjs documents and rejects viewer updates', asy
   assert.equal(viewer.messages.at(-1).code, 'read_only');
 });
 
+test('two editors converge after concurrent changes at the same position and reconnect', async () => {
+  const Y = await import('yjs');
+  class FakeSocket {
+    constructor(id) { this.attachment = { userId: id, name: id, role: 'editor', joinedAt: 1 }; this.messages = []; }
+    deserializeAttachment() { return this.attachment; }
+    send(message) { this.messages.push(JSON.parse(message)); }
+  }
+  const values = new Map();
+  const storage = {
+    get: async (key) => values.get(key),
+    put: async (key, value) => values.set(key, new Uint8Array(value))
+  };
+  const first = new FakeSocket('first-editor');
+  const second = new FakeSocket('second-editor');
+  const state = { storage, getWebSockets: () => [first, second] };
+  const room = new ProjectCollaborationRoom(state);
+  const base = new Y.Doc();
+  base.getText('content').insert(0, 'AB');
+  const baseUpdate = Y.encodeStateAsUpdate(base);
+  await room.webSocketMessage(first, JSON.stringify({
+    type: 'document:seed', path: 'main.tex', update: Buffer.from(baseUpdate).toString('base64')
+  }));
+
+  const left = new Y.Doc();
+  const right = new Y.Doc();
+  Y.applyUpdate(left, baseUpdate);
+  Y.applyUpdate(right, baseUpdate);
+  const leftVector = Y.encodeStateVector(left);
+  const rightVector = Y.encodeStateVector(right);
+  left.getText('content').insert(1, 'X');
+  right.getText('content').insert(1, 'Y');
+  await room.webSocketMessage(first, JSON.stringify({
+    type: 'document:update', path: 'main.tex', update: Buffer.from(Y.encodeStateAsUpdate(left, leftVector)).toString('base64')
+  }));
+  await room.webSocketMessage(second, JSON.stringify({
+    type: 'document:update', path: 'main.tex', update: Buffer.from(Y.encodeStateAsUpdate(right, rightVector)).toString('base64')
+  }));
+
+  const restarted = new ProjectCollaborationRoom(state);
+  await restarted.webSocketMessage(first, JSON.stringify({ type: 'document:subscribe', path: 'main.tex' }));
+  const merged = new Y.Doc();
+  Y.applyUpdate(merged, Buffer.from(first.messages.at(-1).update, 'base64'));
+  const text = merged.getText('content').toString();
+  assert.equal(text.length, 4);
+  assert.deepEqual([...text].sort(), ['A', 'B', 'X', 'Y']);
+});
+
 test('collaboration room broadcasts validated cursor selections without persisting them', async () => {
   class FakeSocket {
     constructor(id, role) { this.attachment = { userId: id, name: id, role, joinedAt: 1 }; this.messages = []; }
@@ -552,8 +599,17 @@ test('collaboration room persists a tombstoned file manifest and moves document 
   }));
   assert.equal(values.has('document:new.tex'), false);
 
+  const savedManifest = JSON.parse(new TextDecoder().decode(values.get('manifest:v1')));
+  savedManifest.entries['ghost.tex'] = { deleted: true, changedAt: Date.now() };
+  savedManifest.pendingDraftDeletes = ['ghost.tex'];
+  values.set('manifest:v1', new TextEncoder().encode(JSON.stringify(savedManifest)));
+  values.set('document:ghost.tex', new Uint8Array([9, 9, 9]));
+
   const restarted = new ProjectCollaborationRoom({ storage, getWebSockets: () => [owner, viewer] });
   await restarted.webSocketMessage(owner, JSON.stringify({ type: 'manifest:subscribe', paths: ['new.tex'] }));
+  assert.equal(values.has('document:ghost.tex'), false);
+  const cleanedManifest = JSON.parse(new TextDecoder().decode(values.get('manifest:v1')));
+  assert.deepEqual(cleanedManifest.pendingDraftDeletes, []);
   const manifest = owner.messages.at(-1);
   assert.equal(manifest.type, 'filesystem:state');
   assert.equal(manifest.entries.find((entry) => entry.path === 'old.tex').deleted, true);
