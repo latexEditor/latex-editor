@@ -12,3 +12,5 @@ reference-sync-data/
 *.synctex.gz
 *.pdf
 !resources/**/*.pdf
+dist/
+*.blockmap

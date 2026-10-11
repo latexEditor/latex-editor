@@ -659,3 +659,91 @@ test('snapshot reset atomically replaces the active manifest and collaborative d
   assert.equal(editor.messages.at(-1).type, 'document:state');
   assert.ok(editor.messages.at(-1).update);
 });
+
+test('owner can delete a project and non-owner cannot', async () => {
+  const env = environment();
+  const owner = (await signedIn(handleRequest, env, 'one')).session;
+  const other = (await signedIn(handleRequest, env, 'two')).session;
+
+  const created = await request(env, owner.token, `/v1/projects/${id}`, upload());
+  assert.equal(created.status, 200);
+
+  const forbidden = await request(env, other.token, `/v1/projects/${id}`, { method: 'DELETE' });
+  assert.equal(forbidden.status, 403);
+
+  const deleted = await request(env, owner.token, `/v1/projects/${id}`, { method: 'DELETE' });
+  assert.equal(deleted.status, 200);
+  const result = await deleted.json();
+  assert.equal(result.deleted, true);
+
+  assert.equal((await request(env, owner.token, `/v1/projects/${id}/meta`)).status, 404);
+  assert.equal((await request(env, owner.token, `/v1/projects/${id}`)).status, 404);
+});
+
+test('user can upload, list, download, and delete personal templates with account isolation', async () => {
+  const env = environment();
+  const userA = (await signedIn(handleRequest, env, 'user-a')).session;
+  const userB = (await signedIn(handleRequest, env, 'user-b')).session;
+
+  const templateId = 'personal-11111111-2222-3333-4444-555555555555';
+  const dummyZip = Buffer.concat([
+    Buffer.from([0x50, 0x4b, 0x03, 0x04]),
+    Buffer.alloc(20)
+  ]);
+
+  // Initially empty
+  const emptyRes = await request(env, userA.token, '/v1/templates');
+  assert.equal(emptyRes.status, 200);
+  assert.deepEqual(await emptyRes.json(), { templates: [] });
+
+  // Upload template
+  const uploadRes = await request(env, userA.token, `/v1/templates/${templateId}`, {
+    method: 'PUT',
+    headers: {
+      'X-Template-Name': encodeURIComponent('Mẫu Luận Văn Thạc Sĩ'),
+      'X-Template-Engine': 'xelatex',
+      'X-Template-Description': encodeURIComponent('Mẫu luận văn tiếng Việt')
+    },
+    body: dummyZip
+  });
+  assert.equal(uploadRes.status, 200);
+  const uploaded = await uploadRes.json();
+  assert.equal(uploaded.id, templateId);
+  assert.equal(uploaded.name, 'Mẫu Luận Văn Thạc Sĩ');
+  assert.equal(uploaded.engine, 'xelatex');
+
+  // List returns User A's template
+  const listA = await (await request(env, userA.token, '/v1/templates')).json();
+  assert.equal(listA.templates.length, 1);
+  assert.equal(listA.templates[0].id, templateId);
+
+  // User B's list is still empty (account isolation)
+  const listB = await (await request(env, userB.token, '/v1/templates')).json();
+  assert.equal(listB.templates.length, 0);
+
+  // User B cannot download User A's template
+  const forbiddenDownload = await request(env, userB.token, `/v1/templates/${templateId}`);
+  assert.equal(forbiddenDownload.status, 404);
+
+  // User A downloads their template
+  const downloadA = await request(env, userA.token, `/v1/templates/${templateId}`);
+  assert.equal(downloadA.status, 200);
+  assert.equal(downloadA.headers.get('Content-Type'), 'application/zip');
+  assert.equal(decodeURIComponent(downloadA.headers.get('X-Template-Name')), 'Mẫu Luận Văn Thạc Sĩ');
+
+  // User B cannot delete User A's template
+  const forbiddenDelete = await request(env, userB.token, `/v1/templates/${templateId}`, { method: 'DELETE' });
+  assert.equal(forbiddenDelete.status, 404);
+
+  // User A deletes template
+  const deleteA = await request(env, userA.token, `/v1/templates/${templateId}`, { method: 'DELETE' });
+  assert.equal(deleteA.status, 200);
+  const deleted = await deleteA.json();
+  assert.equal(deleted.deleted, true);
+
+  // User A's list is empty again
+  const afterDelete = await (await request(env, userA.token, '/v1/templates')).json();
+  assert.equal(afterDelete.templates.length, 0);
+});
+
+

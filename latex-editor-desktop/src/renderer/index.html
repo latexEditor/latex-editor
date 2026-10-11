@@ -69,6 +69,7 @@
           <div class="template-library-actions">
             <button id="import-template" type="button" title="Nhập template từ file ZIP">Nhập ZIP</button>
             <button id="save-project-template" type="button" title="Lưu project đang mở thành template cá nhân">Lưu project làm mẫu</button>
+            <button id="sync-templates" type="button" title="Đồng bộ tất cả mẫu cá nhân với Cloud">☁ Đồng bộ mẫu</button>
           </div>
         </div>
         <div class="template-filters">
@@ -160,6 +161,14 @@
         </form>
       </div>
       <div id="cloud-projects" class="recent-list"></div>
+      <div class="cloud-templates-card">
+        <div class="cloud-templates-header">
+          <h3>📑 Template cá nhân trên Cloud</h3>
+          <button id="cloud-templates-sync-all" type="button">Đồng bộ tất cả</button>
+        </div>
+        <p class="feature-note">Lưu trên Cloudflare R2 để đồng bộ và sử dụng xuyên suốt giữa các máy tính.</p>
+        <div id="cloud-templates-list" class="recent-list"></div>
+      </div>
     </section>
     <div id="account-feedback" class="feature-feedback" role="status"></div>
     <div class="dialog-actions"><button id="account-close" type="button">Đóng</button></div>
@@ -223,6 +232,7 @@
 
     <div id="share-feedback" class="feature-feedback" role="status"></div>
     <div class="dialog-actions">
+      <button id="share-delete-project" type="button" class="btn-danger" hidden>Xóa khỏi Cloud</button>
       <button id="share-refresh" type="button">Làm mới</button>
       <button id="share-close" type="button" class="primary">Đóng</button>
     </div>

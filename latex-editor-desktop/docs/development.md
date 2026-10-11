@@ -30,8 +30,16 @@ code-server được cô lập trên Node 20.19.5 bởi script setup để khôn
 
 | Biến | Ý nghĩa |
 | --- | --- |
-| `LATEX_EDITOR_DATA_DIR` | toàn bộ dữ liệu local của app |
-| `LATEX_EDITOR_PROJECTS_DIR` | thư mục project mặc định |
-| `CODE_SERVER_BIN` | code-server executable tùy chỉnh |
-| `CODE_SERVER_PORT` | cổng ưu tiên |
-| `CODE_SERVER_READY_TIMEOUT_MS` | timeout khởi động |
+| `LATEX_EDITOR_API_URL` | URL backend Worker (mặc định trỏ production `https://latex-editor-cloud.emsidt.workers.dev`) |
+| `LATEX_EDITOR_DATA_DIR` | toàn bộ dữ liệu local của app (`%APPDATA%\LatexEditor`) |
+| `LATEX_EDITOR_PROJECTS_DIR` | thư mục lưu project mặc định |
+| `CODE_SERVER_BIN` | đường dẫn binary code-server tùy chỉnh |
+| `CODE_SERVER_PORT` | cổng ưu tiên cho code-server |
+| `CODE_SERVER_READY_TIMEOUT_MS` | thời gian chờ tối đa cho code-server sẵn sàng (ms) |
+
+## Kiểm thử tự động
+
+- `npm test`: Chạy 74 unit và integration test cho desktop (workspace, template, compiler detection, Git history, safeStorage auth, cloud sync, collaboration queue).
+- `npm run test:ui`: Khởi động Electron ẩn và kiểm tra tương tác thực tế giữa shell UI, preload bridge và IPC handler.
+- `npm run check`: Kiểm tra cú pháp toàn bộ file mã nguồn.
+

@@ -166,3 +166,33 @@ test('owner can manage team: list members, invite by email and link, accept, col
   const afterRemove = await cloud.listMembers(project.path);
   assert.equal(afterRemove.length, 1);
 });
+
+test('owner can delete cloud project by project path or by id; local files remain untouched', async (t) => {
+  const { project, cloud, history } = await fixture(t);
+
+  // Unsynced delete fails
+  await assert.rejects(cloud.deleteProject(project.path), /chưa được đồng bộ lên cloud/);
+
+  // Upload project
+  const initialTex = await fs.readFile(path.join(project.path, 'main.tex'), 'utf8');
+  await history.save(project.path, 'Initial commit');
+  const uploaded = await cloud.upload(project.path);
+  assert.equal((await cloud.list()).length, 1);
+  assert.ok(await cloud.readMetadata(project.path));
+
+  // Delete project
+  const result = await cloud.deleteProject(project.path);
+  assert.equal(result.deleted, true);
+  assert.equal(result.projectId, uploaded.project.id);
+
+  // Cloud list is now empty
+  assert.equal((await cloud.list()).length, 0);
+
+  // Local metadata file was removed
+  assert.equal(await cloud.readMetadata(project.path), null);
+
+  // Local files and history remain intact!
+  assert.equal(await fs.readFile(path.join(project.path, 'main.tex'), 'utf8'), initialTex);
+  assert.equal((await history.list(project.path)).length, 1);
+});
+

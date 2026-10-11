@@ -226,6 +226,92 @@ export async function handleRequest(request, env, fetcher = fetch) {
       return json({ projects, cursor: hasMore ? String(offset + limit) : null });
     }
 
+    // --- Personal Templates ---
+
+    // List personal templates for current user
+    if (url.pathname === '/v1/templates' && request.method === 'GET') {
+      const { results } = await env.DB.prepare(
+        'SELECT id, name, engine, description, created_at, updated_at FROM user_templates WHERE user_id = ? ORDER BY name ASC'
+      ).bind(current.user.id).all();
+      const templates = (results || []).map((t) => ({
+        id: t.id,
+        name: t.name,
+        engine: t.engine,
+        description: t.description || '',
+        createdAt: t.created_at,
+        updatedAt: t.updated_at
+      }));
+      return json({ templates });
+    }
+
+    // Template-scoped routes: /v1/templates/:id
+    const templateRoute = url.pathname.match(/^\/v1\/templates\/([^/]+)$/);
+    if (templateRoute) {
+      const templateId = templateRoute[1];
+      if (!/^personal-[0-9a-f-]{36}$/i.test(templateId)) throw new HttpError(400, 'Mã template không hợp lệ.');
+
+      // Upload template
+      if (request.method === 'PUT') {
+        let name;
+        try { name = decodeURIComponent(request.headers.get('X-Template-Name') || ''); } catch { throw new HttpError(400, 'Tên template không hợp lệ.'); }
+        name = (name || '').trim().slice(0, 100);
+        if (!name || /[\x00-\x1f]/.test(name)) throw new HttpError(400, 'Tên template không hợp lệ.');
+        let description = '';
+        try { description = decodeURIComponent(request.headers.get('X-Template-Description') || ''); } catch {}
+        const engine = request.headers.get('X-Template-Engine') === 'xelatex' ? 'xelatex' : 'pdflatex';
+
+        const data = await boundedBody(request, MAX_BUNDLE);
+        if (data.length < 22 || data[0] !== 0x50 || data[1] !== 0x4b) throw new HttpError(400, 'Dữ liệu template phải là định dạng ZIP.');
+
+        const bundleKey = `templates/${current.user.id}/${templateId}.zip`;
+        await env.PROJECTS.put(bundleKey, data, { httpMetadata: { contentType: 'application/zip' } });
+        const now = new Date().toISOString();
+
+        await env.DB.prepare(
+          'INSERT INTO user_templates (id, user_id, name, engine, description, bundle_key, created_at, updated_at) ' +
+          'VALUES (?, ?, ?, ?, ?, ?, ?, ?) ' +
+          'ON CONFLICT(user_id, id) DO UPDATE SET name = excluded.name, engine = excluded.engine, description = excluded.description, bundle_key = excluded.bundle_key, updated_at = excluded.updated_at'
+        ).bind(templateId, current.user.id, name, engine, description, bundleKey, now, now).run();
+
+        return json({ id: templateId, name, engine, description, updatedAt: now });
+      }
+
+      // Download template
+      if (request.method === 'GET') {
+        const template = await env.DB.prepare(
+          'SELECT * FROM user_templates WHERE user_id = ? AND id = ?'
+        ).bind(current.user.id, templateId).first();
+        if (!template) throw new HttpError(404, 'Không tìm thấy template.');
+
+        const obj = await env.PROJECTS.get(template.bundle_key);
+        if (!obj) throw new HttpError(404, 'File template không tồn tại trên R2.');
+
+        return new Response(obj.body, {
+          headers: {
+            'Content-Type': 'application/zip',
+            'Content-Length': String(obj.size),
+            'X-Template-Id': template.id,
+            'X-Template-Name': encodeURIComponent(template.name),
+            'X-Template-Engine': template.engine,
+            'X-Template-Description': encodeURIComponent(template.description || '')
+          }
+        });
+      }
+
+      // Delete template
+      if (request.method === 'DELETE') {
+        const template = await env.DB.prepare(
+          'SELECT * FROM user_templates WHERE user_id = ? AND id = ?'
+        ).bind(current.user.id, templateId).first();
+        if (!template) throw new HttpError(404, 'Không tìm thấy template.');
+
+        try { await env.PROJECTS.delete(template.bundle_key); } catch {}
+        await env.DB.prepare('DELETE FROM user_templates WHERE user_id = ? AND id = ?').bind(current.user.id, templateId).run();
+
+        return json({ deleted: true, templateId });
+      }
+    }
+
     // --- Team invitations ---
 
     // List received invitations for current user
@@ -386,6 +472,37 @@ export async function handleRequest(request, env, fetcher = fetch) {
         throw new HttpError(409, 'Xung đột: project vừa được cập nhật từ máy khác.');
       }
       return json({ id: projectId, name, head, bundle_key: bundleKey, protocol: 'git-bundle-v1', updatedAt: now, etag: `"${now}"` });
+    }
+
+    // DELETE project — owner only
+    if (subpath === '' && request.method === 'DELETE') {
+      await authorize(env.DB, projectId, current.user.id, ['owner']);
+
+      // Disconnect all sessions & destroy Durable Object room data
+      if (env.COLLABORATION_ROOMS) {
+        try {
+          const stub = env.COLLABORATION_ROOMS.getByName(projectId);
+          await stub.fetch(new Request('https://collaboration.internal/destroy', { method: 'POST' }));
+        } catch {}
+      }
+
+      // Delete R2 bundles for this project
+      try {
+        const prefix = `bundles/${projectId}/`;
+        const listed = await env.PROJECTS.list({ prefix });
+        if (listed && Array.isArray(listed.objects)) {
+          for (const item of listed.objects) {
+            await env.PROJECTS.delete(item.key);
+          }
+        } else if (project.bundle_key) {
+          await env.PROJECTS.delete(project.bundle_key);
+        }
+      } catch {}
+
+      // Delete from D1 (cascades to project_members and invitations)
+      await env.DB.prepare('DELETE FROM projects WHERE id = ?').bind(projectId).run();
+
+      return json({ deleted: true, projectId });
     }
 
     // --- Team management routes (under /v1/projects/:id/...) ---

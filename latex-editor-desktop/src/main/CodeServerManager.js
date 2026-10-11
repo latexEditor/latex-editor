@@ -151,41 +151,88 @@ class CodeServerManager {
   }
 
   #installBundledExtension() {
-    const source = this.config.bundledCollaborationExtension;
-    if (!source || !fs.existsSync(source)) return;
-    const folder = 'latex-editor.latex-editor-collaboration-0.1.0';
-    const target = path.join(this.config.extensionsDir, folder);
-    fs.cpSync(source, target, { recursive: true, force: true });
-
-    const obsoletePath = path.join(this.config.extensionsDir, '.obsolete');
-    try {
-      const obsolete = JSON.parse(fs.readFileSync(obsoletePath, 'utf8'));
-      if (obsolete[folder]) {
-        delete obsolete[folder];
-        if (Object.keys(obsolete).length) fs.writeFileSync(obsoletePath, JSON.stringify(obsolete), 'utf8');
-        else fs.rmSync(obsoletePath, { force: true });
+    const sources = [];
+    if (this.config.bundledExtensionsDir && fs.existsSync(this.config.bundledExtensionsDir)) {
+      try {
+        const entries = fs.readdirSync(this.config.bundledExtensionsDir, { withFileTypes: true });
+        for (const entry of entries) {
+          if (entry.isDirectory()) sources.push(path.join(this.config.bundledExtensionsDir, entry.name));
+        }
+      } catch (error) {
+        this.log.error('Failed to read bundled extensions dir:', error);
       }
-    } catch {}
+    } else if (this.config.bundledCollaborationExtension && fs.existsSync(this.config.bundledCollaborationExtension)) {
+      sources.push(this.config.bundledCollaborationExtension);
+    }
+
+    if (!sources.length) return;
 
     const registryPath = path.join(this.config.extensionsDir, 'extensions.json');
     let registry = [];
     try { registry = JSON.parse(fs.readFileSync(registryPath, 'utf8')); } catch {}
     if (!Array.isArray(registry)) registry = [];
-    const id = 'latex-editor.latex-editor-collaboration';
-    const existing = registry.find((item) => item.identifier?.id === id);
-    const url = pathToFileURL(target);
-    const entry = {
-      identifier: { id }, version: '0.1.0',
-      location: { $mid: 1, fsPath: target, _sep: 1, external: url.href, path: url.pathname, scheme: 'file' },
-      relativeLocation: folder,
-      metadata: {
-        isApplicationScoped: false, isMachineScoped: false, isBuiltin: false,
-        installedTimestamp: existing?.metadata?.installedTimestamp || Date.now(),
-        pinned: true, source: 'vsix', targetPlatform: 'universal'
+
+    const obsoletePath = path.join(this.config.extensionsDir, '.obsolete');
+    let obsolete = {};
+    try { obsolete = JSON.parse(fs.readFileSync(obsoletePath, 'utf8')); } catch {}
+    if (typeof obsolete !== 'object' || obsolete === null) obsolete = {};
+    let obsoleteChanged = false;
+
+    for (const source of sources) {
+      const manifestPath = path.join(source, 'package.json');
+      if (!fs.existsSync(manifestPath)) continue;
+      let pkg = {};
+      try { pkg = JSON.parse(fs.readFileSync(manifestPath, 'utf8')); } catch { continue; }
+
+      const rawId = pkg.publisher ? `${pkg.publisher}.${pkg.name}` : (pkg.name || path.basename(source));
+      const id = rawId.includes('.') ? rawId : `latex-editor.${rawId}`;
+      const version = pkg.version || '0.1.0';
+      const dirName = path.basename(source);
+      const folder = /-\d+\.\d+/.test(dirName) ? dirName : `${id}-${version}`;
+      const target = path.join(this.config.extensionsDir, folder);
+
+      const targetManifest = path.join(target, 'package.json');
+      let needsCopy = !fs.existsSync(targetManifest);
+      if (!needsCopy) {
+        try {
+          const installedPkg = JSON.parse(fs.readFileSync(targetManifest, 'utf8'));
+          if (installedPkg.version !== version) needsCopy = true;
+        } catch { needsCopy = true; }
       }
-    };
-    registry = [...registry.filter((item) => item.identifier?.id !== id), entry];
-    fs.writeFileSync(registryPath, JSON.stringify(registry), 'utf8');
+      if (needsCopy) {
+        fs.cpSync(source, target, { recursive: true, force: true });
+      }
+
+      if (obsolete[folder]) {
+        delete obsolete[folder];
+        obsoleteChanged = true;
+      }
+
+      const existing = registry.find((item) => item.identifier?.id?.toLowerCase() === id.toLowerCase());
+      const url = pathToFileURL(target);
+      const entry = {
+        identifier: { id },
+        version,
+        location: { $mid: 1, fsPath: target, _sep: 1, external: url.href, path: url.pathname, scheme: 'file' },
+        relativeLocation: folder,
+        metadata: {
+          isApplicationScoped: false, isMachineScoped: false, isBuiltin: false,
+          installedTimestamp: existing?.metadata?.installedTimestamp || Date.now(),
+          pinned: true, source: 'vsix', targetPlatform: 'universal'
+        }
+      };
+      registry = [...registry.filter((item) => item.identifier?.id?.toLowerCase() !== id.toLowerCase()), entry];
+    }
+
+    try {
+      fs.writeFileSync(registryPath, JSON.stringify(registry, null, 2), 'utf8');
+      if (obsoleteChanged) {
+        if (Object.keys(obsolete).length) fs.writeFileSync(obsoletePath, JSON.stringify(obsolete), 'utf8');
+        else fs.rmSync(obsoletePath, { force: true });
+      }
+    } catch (error) {
+      this.log.error('Failed to update extension registry:', error);
+    }
   }
 
   #capture(level, data) {

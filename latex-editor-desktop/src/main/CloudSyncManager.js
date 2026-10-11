@@ -238,6 +238,161 @@ class CloudSyncManager {
     });
     return await response.json();
   }
+
+  async deleteProjectById(id) {
+    if (!/^[a-f0-9-]{36}$/.test(id || '')) throw new Error('Mã project cloud không hợp lệ.');
+    return this.exclusive(async (user, check) => {
+      const response = await this.auth.request(`/v1/projects/${id}`, {
+        method: 'DELETE'
+      });
+      const result = await response.json();
+      check();
+      try {
+        const files = await fs.readdir(this.directory);
+        for (const file of files) {
+          if (file.endsWith('.json')) {
+            const fullPath = path.join(this.directory, file);
+            try {
+              const meta = JSON.parse(await fs.readFile(fullPath, 'utf8'));
+              if (meta && meta.id === id) {
+                await fs.unlink(fullPath);
+              }
+            } catch {}
+          }
+        }
+      } catch {}
+      return result;
+    });
+  }
+
+  async deleteProject(project) {
+    const metadata = await this.readMetadata(project);
+    if (!metadata) throw new Error('Project này chưa được đồng bộ lên cloud.');
+    if (metadata.apiUrl !== this.auth.apiUrl) {
+      throw new Error('Project này thuộc tài khoản hoặc dịch vụ cloud khác.');
+    }
+    const result = await this.deleteProjectById(metadata.id);
+    try {
+      await fs.unlink(this.metadataPath(project));
+    } catch (err) {
+      if (err.code !== 'ENOENT') throw err;
+    }
+    return result;
+  }
+
+  async listCloudTemplates() {
+    return this.exclusive(async (user, check) => {
+      const response = await this.auth.request('/v1/templates');
+      check();
+      const data = await response.json();
+      return data.templates || [];
+    });
+  }
+
+  async uploadTemplate(templateId) {
+    if (!/^personal-[0-9a-f-]{36}$/i.test(templateId || '')) throw new Error('Mã template không hợp lệ.');
+    return this.exclusive(async (user, check) => {
+      const template = this.workspace.personalTemplates.exportZipBuffer(templateId);
+      check();
+      const response = await this.auth.request(`/v1/templates/${templateId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/zip',
+          'X-Template-Name': encodeURIComponent(template.name),
+          'X-Template-Engine': template.engine,
+          'X-Template-Description': encodeURIComponent(template.description || '')
+        },
+        body: template.buffer
+      });
+      check();
+      return await response.json();
+    });
+  }
+
+  async downloadTemplate(templateId) {
+    if (!/^personal-[0-9a-f-]{36}$/i.test(templateId || '')) throw new Error('Mã template không hợp lệ.');
+    return this.exclusive(async (user, check) => {
+      const response = await this.auth.request(`/v1/templates/${templateId}`);
+      check();
+      const name = decodeURIComponent(response.headers.get('X-Template-Name') || '');
+      const chunks = [];
+      let total = 0;
+      for await (const chunk of response.body) {
+        total += chunk.length;
+        if (total > MAX_BYTES) throw new Error('Template vượt giới hạn 50 MB.');
+        chunks.push(Buffer.from(chunk));
+      }
+      check();
+      const buffer = Buffer.concat(chunks);
+      return await this.workspace.personalTemplates.importFromBuffer(buffer, name, templateId);
+    });
+  }
+
+  async deleteCloudTemplate(templateId) {
+    if (!/^personal-[0-9a-f-]{36}$/i.test(templateId || '')) throw new Error('Mã template không hợp lệ.');
+    return this.exclusive(async (user, check) => {
+      const response = await this.auth.request(`/v1/templates/${templateId}`, {
+        method: 'DELETE'
+      });
+      check();
+      return await response.json();
+    });
+  }
+
+  async syncAllTemplates() {
+    return this.exclusive(async (user, check) => {
+      const cloudList = (await (await this.auth.request('/v1/templates')).json()).templates || [];
+      check();
+      const cloudMap = new Map(cloudList.map((t) => [t.id, t]));
+      const localList = this.workspace.personalTemplates.list();
+      const localMap = new Map(localList.map((t) => [t.id, t]));
+
+      let uploaded = 0;
+      let downloaded = 0;
+
+      // Upload local templates missing from cloud
+      for (const local of localList) {
+        if (!cloudMap.has(local.id)) {
+          const template = this.workspace.personalTemplates.exportZipBuffer(local.id);
+          check();
+          await this.auth.request(`/v1/templates/${local.id}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/zip',
+              'X-Template-Name': encodeURIComponent(template.name),
+              'X-Template-Engine': template.engine,
+              'X-Template-Description': encodeURIComponent(template.description || '')
+            },
+            body: template.buffer
+          });
+          uploaded += 1;
+        }
+      }
+
+      // Download cloud templates missing from local
+      for (const cloud of cloudList) {
+        if (!localMap.has(cloud.id)) {
+          const response = await this.auth.request(`/v1/templates/${cloud.id}`);
+          check();
+          const name = decodeURIComponent(response.headers.get('X-Template-Name') || cloud.name);
+          const chunks = [];
+          for await (const chunk of response.body) chunks.push(Buffer.from(chunk));
+          const buffer = Buffer.concat(chunks);
+          check();
+          await this.workspace.personalTemplates.importFromBuffer(buffer, name, cloud.id);
+          downloaded += 1;
+        }
+      }
+
+      return {
+        uploaded,
+        downloaded,
+        total: (this.workspace.personalTemplates.list()).length
+      };
+    });
+  }
 }
 
 module.exports = { CloudSyncManager };
+
+

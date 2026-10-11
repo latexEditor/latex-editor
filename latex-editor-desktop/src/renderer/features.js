@@ -237,6 +237,8 @@
       const text = document.createElement('span');
       const roleText = project.role === 'owner' ? 'Chủ sở hữu' : project.role === 'editor' ? 'Chỉnh sửa' : project.role === 'viewer' ? 'Xem' : '';
       text.textContent = `${project.name} ${roleText ? `(${roleText})` : ''} · ${new Date(project.updatedAt).toLocaleString('vi-VN')}`;
+      const actions = document.createElement('div');
+      actions.className = 'member-actions';
       const download = document.createElement('button');
       download.type = 'button';
       download.textContent = 'Tải bản sao';
@@ -244,8 +246,76 @@
         const copy = await api.cloudDownload(project.id);
         feedback('#account-feedback', `Đã tải ${copy.name}, kèm lịch sử phiên bản.`);
       }));
-      row.append(text, download);
+      actions.append(download);
+
+      if (project.role === 'owner') {
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'btn-danger';
+        delBtn.textContent = 'Xóa';
+        delBtn.title = 'Xóa project khỏi Cloud';
+        delBtn.addEventListener('click', () => cloudAction(async () => {
+          const res = await api.cloudDeleteById(project.id, project.name);
+          if (!res.canceled) {
+            feedback('#account-feedback', `Đã xóa project ${project.name} khỏi Cloud.`);
+            await loadCloud();
+          }
+        }));
+        actions.append(delBtn);
+      }
+      row.append(text, actions);
       container.append(row);
+    }
+
+    if (api.templateCloudList) {
+      try {
+        const templates = await api.templateCloudList();
+        const tplContainer = $('#cloud-templates-list');
+        if (tplContainer) {
+          tplContainer.replaceChildren();
+          if (!templates.length) {
+            tplContainer.textContent = 'Chưa có template cá nhân trên cloud.';
+          } else {
+            for (const tpl of templates) {
+              const row = document.createElement('div');
+              row.className = 'cloud-project';
+              const text = document.createElement('span');
+              text.textContent = `${tpl.name} (${tpl.engine === 'xelatex' ? 'XeLaTeX' : 'pdfLaTeX'}) · ${new Date(tpl.updatedAt).toLocaleString('vi-VN')}`;
+
+              const actions = document.createElement('div');
+              actions.className = 'member-actions';
+
+              const dlBtn = document.createElement('button');
+              dlBtn.type = 'button';
+              dlBtn.textContent = 'Tải về máy';
+              dlBtn.addEventListener('click', () => cloudAction(async () => {
+                await api.templateCloudDownload(tpl.id);
+                feedback('#account-feedback', `Đã tải template “${tpl.name}” về máy.`);
+                await loadCloud();
+              }));
+
+              const delBtn = document.createElement('button');
+              delBtn.type = 'button';
+              delBtn.className = 'btn-danger';
+              delBtn.textContent = 'Xóa';
+              delBtn.title = 'Xóa template khỏi Cloud';
+              delBtn.addEventListener('click', () => cloudAction(async () => {
+                const res = await api.templateCloudDelete(tpl.id, tpl.name);
+                if (!res.canceled) {
+                  feedback('#account-feedback', `Đã xóa template “${tpl.name}” khỏi Cloud.`);
+                  await loadCloud();
+                }
+              }));
+
+              actions.append(dlBtn, delBtn);
+              row.append(text, actions);
+              tplContainer.append(row);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to load cloud templates:', err);
+      }
     }
   }
   $('#account-button').addEventListener('click', async () => {
@@ -277,6 +347,11 @@
     await loadCloud(); feedback('#account-feedback', result.message);
   }));
   $('#cloud-refresh').addEventListener('click', () => cloudAction(async () => { await loadCloud(); feedback('#account-feedback', 'Đã cập nhật danh sách.'); }));
+  $('#cloud-templates-sync-all')?.addEventListener('click', () => cloudAction(async () => {
+    const result = await api.templateCloudSyncAll();
+    feedback('#account-feedback', `Đã đồng bộ mẫu (Tải lên: ${result.uploaded}, Tải về: ${result.downloaded}). Tổng số: ${result.total}.`);
+    await loadCloud();
+  }));
   $('#join-invite-form')?.addEventListener('submit', (event) => {
     event.preventDefault();
     const raw = $('#join-invite-input').value.trim();
@@ -319,6 +394,7 @@
     $('#share-project-name').textContent = shareProject.name;
     $('#share-unsynced-banner').hidden = true;
     $('#share-main').hidden = true;
+    $('#share-delete-project').hidden = true;
     $('#share-members-list').replaceChildren();
     $('#share-pending-list').replaceChildren();
     $('#share-invite-section').hidden = true;
@@ -359,6 +435,7 @@
 
     const isOwner = myRole === 'owner';
     $('#share-invite-section').hidden = !isOwner;
+    $('#share-delete-project').hidden = !isOwner;
 
     // Members list
     let members = [];
@@ -539,6 +616,14 @@
   $('#share-refresh').addEventListener('click', () => shareAction(async () => {
     await loadShare();
     feedback('#share-feedback', 'Đã làm mới thông tin.');
+  }));
+
+  $('#share-delete-project').addEventListener('click', () => shareAction(async () => {
+    const result = await api.cloudDeleteProject(shareProject.path);
+    if (!result.canceled) {
+      feedback('#share-feedback', 'Đã xóa project khỏi Cloud.');
+      shareDialog.close();
+    }
   }));
 
   $('#share-close').addEventListener('click', () => shareDialog.close());

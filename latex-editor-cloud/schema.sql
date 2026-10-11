@@ -54,3 +54,17 @@ CREATE TABLE IF NOT EXISTS invitations (
 CREATE INDEX IF NOT EXISTS idx_invitations_email ON invitations(email);
 CREATE INDEX IF NOT EXISTS idx_invitations_project ON invitations(project_id);
 CREATE INDEX IF NOT EXISTS idx_invitations_token ON invitations(token_hash);
+
+CREATE TABLE IF NOT EXISTS user_templates (
+  id           TEXT NOT NULL,
+  user_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name         TEXT NOT NULL,
+  engine       TEXT NOT NULL DEFAULT 'pdflatex',
+  description  TEXT,
+  bundle_key   TEXT NOT NULL,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (user_id, id)
+);
+CREATE INDEX IF NOT EXISTS idx_user_templates_user ON user_templates(user_id);
+

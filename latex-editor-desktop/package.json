@@ -16,13 +16,65 @@
     "setup:code-server": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/setup-code-server-runtime.ps1",
     "setup:latex-workshop": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/setup-latex-workshop.ps1",
     "check:latex": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-latex-runtime.ps1",
-    "setup": "npm run setup:code-server && npm run setup:latex-workshop && npm run check:latex"
+    "setup": "npm run setup:code-server && npm run setup:latex-workshop && npm run check:latex",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder",
+    "build:installer": "electron-builder --win nsis",
+    "build:portable": "electron-builder --win portable"
   },
   "devDependencies": {
-    "electron": "43.2.0"
+    "electron": "43.2.0",
+    "electron-builder": "^26.15.3"
   },
   "dependencies": {
     "yauzl": "^3.4.0",
     "yjs": "^13.6.33"
+  },
+  "build": {
+    "appId": "com.latexeditor.desktop",
+    "productName": "LaTeX Editor",
+    "copyright": "Copyright © 2026 LaTeX Editor",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "runtime",
+        "to": "runtime",
+        "filter": [
+          "**/*",
+          "!*.zip"
+        ]
+      },
+      {
+        "from": "resources",
+        "to": "resources",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "resources/icons/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "LaTeX Editor"
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-portable.${ext}"
+    }
   }
 }

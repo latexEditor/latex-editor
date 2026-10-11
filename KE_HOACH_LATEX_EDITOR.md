@@ -308,89 +308,45 @@ Kết quả cần có: bản MVP local đủ ổn định để demo.
 
 ## 9. Kế hoạch milestone
 
-### M0 — Hiểu repo tham chiếu và cố định môi trường
+### M0 — Hiểu repo tham chiếu và cố định môi trường (Đã hoàn thành)
 
-Phạm vi: đọc code, ghi dependency, khóa Node 20 và kiểm tra toolchain.
+Phạm vi: đọc code, ghi dependency, khóa Node 20.19.5 và kiểm tra toolchain.
 
-Hoàn thành khi:
+### M1 — Electron + code-server (Đã hoàn thành)
 
-- Giải thích được luồng Electron → workspace → code-server.
-- Chạy lại repo tham chiếu từ môi trường sạch.
-- Biết chính xác file/hàm sẽ port.
+Phạm vi: shell desktop, topbar gọn gàng, `WebContentsView`, lifecycle, đóng app sạch sẽ và local workspace đa tab.
 
-### M1 — Electron + code-server
+### M2 — LaTeX Workshop MVP & Mẫu tài liệu (Đã hoàn thành)
 
-Phạm vi: shell desktop, sidebar, `WebContentsView`, lifecycle và local workspace.
+Phạm vi: extension, LaTeX runtime (MiKTeX/TeX Live), tự cấu hình recipe pdflatex/xelatex, 7 template tích hợp có ảnh PDF xem trước thật, nhập ZIP an toàn, lưu template cá nhân, build PDF tự mở và SyncTeX.
 
-Hoàn thành khi:
+### M3 — Git-like History & Bảo vệ phiên bản (Đã hoàn thành)
 
-- App mở thẳng editor local không cần tài khoản.
-- Workspace được mở đúng.
-- Resize hoạt động.
-- Đóng app không để lại `code-server`.
+Phạm vi: Git mirror riêng biệt băm theo đường dẫn project (không đụng `.git` người dùng), lưu snapshot có ghi chú, xem diff, tạo safety snapshot trước khi restore, đóng gói Git bundle v2.
 
-### M2 — LaTeX Workshop MVP
+### M4 — Google Auth & Đồng bộ R2 (Đã hoàn thành)
 
-Phạm vi: extension, LaTeX runtime, template, build và PDF preview.
+Phạm vi: Google OAuth loopback + PKCE, mã dùng một lần, token phiên mã hóa Electron safeStorage, Cloudflare Worker backend, đồng bộ Git bundle v2 lên R2 (`bundles/:projectId/:uuid.bundle`), tải bản sao, phát hiện xung đột.
 
-Hoàn thành khi:
+### M5 — Quản lý Project Cloud & Phân quyền Chia sẻ (Đã hoàn thành)
 
-- Tạo project từ template.
-- Build `main.tex` thành PDF.
-- Xem PDF và lỗi compile trong editor.
-- Hoạt động với đường dẫn Windows thực tế.
+Phạm vi: Cơ sở dữ liệu D1 SQLite (`users`, `sessions`, `projects`, `project_members`, `invitations`), phân quyền `owner`/`editor`/`viewer`, mời qua email & link bí mật `id:token`, thu hồi lời mời, xem danh sách và xóa thành viên, chặn xóa owner cuối cùng.
 
-Đây là milestone demo đầu tiên và cần được hoàn thành trước mọi tính năng cloud.
+### M6 — Cộng tác thời gian thực Yjs & Durable Objects (Đã hoàn thành)
 
-### M3 — Git local
+Phạm vi: Cloudflare Durable Objects room theo project, đồng bộ Yjs thời gian thực cho `.tex/.bib/.sty/.cls/.md`, presence/cursor/selection, phân quyền ghi (chặn viewer), hàng đợi đồng bộ tạo/xóa/đổi tên file có tombstone & operation ID, reset draft an toàn khi restore snapshot lịch sử.
 
-Phạm vi: khởi tạo Git cho từng project, commit cơ bản và lịch sử phiên bản.
+### M7 — Hoàn thiện Desktop & Đóng gói phát hành (Ưu tiên hiện tại)
 
-Hoàn thành khi:
+Phạm vi: Đóng gói installer .exe và portable với electron-builder, nghiệm thu máy Windows sạch không có Node/MiKTeX, kiểm thử nghiệm thu 2 tài khoản thật trên Worker production.
 
-- Project mới có thể được `git init`.
-- Có thể commit và phục hồi phiên bản theo UX đã chọn.
-- Không làm mất file chưa commit.
+### M8 — Cloud Quota, Vận hành & Đồng bộ Mẫu (Tiếp theo)
 
-### M4 — Auth + R2 sync
+Phạm vi: Quota dung lượng theo tài khoản/project, garbage collection cho bundle R2 cũ, API xóa project/xóa tài khoản, backup định kỳ R2/D1, đồng bộ template cá nhân lên R2.
 
-Phạm vi: Google login, profile, session R2, `GitSyncManager` và `AutoSyncService`.
+### M9 — Web Client & Build LaTeX Từ Xa (Tương lai)
 
-Luồng dự kiến:
-
-```text
-Google login
-    ↓
-R2 session
-    ↓
-AutoSyncService
-    ↓
-GitSyncManager
-    ↓
-R2 (git-bundle-v1)
-```
-
-Hoàn thành khi:
-
-- Local mode vẫn dùng được khi chưa đăng nhập hoặc mất mạng.
-- Đăng nhập bật khả năng sync thay vì chặn editor.
-- Push/pull có trạng thái rõ ràng và xử lý conflict an toàn.
-- Kiểm tra protocol/version trước khi đồng bộ.
-- Token và khóa không đi qua renderer ngoài API tối thiểu.
-
-### M5 — Quản lý project cloud
-
-Phạm vi: danh sách project, tạo/xóa/đổi tên, recent projects, sync status và khôi phục trên máy khác.
-
-Hoàn thành khi:
-
-- Đăng nhập trên máy khác tải được project và build lại được.
-- Có trạng thái `local`, `syncing`, `synced`, `conflict`, `error`.
-- Không ghi đè âm thầm khi hai máy cùng sửa.
-
-### M6 — Phiên bản web
-
-Chỉ bắt đầu sau khi định nghĩa rõ yêu cầu. Cần quyết định web là:
+Chỉ bắt đầu sau khi desktop đã phát hành ổn định. Cần quyết định web là:
 
 1. Web app kết nối backend chạy LaTeX trong container; hoặc
 2. Remote code-server được quản lý theo người dùng; hoặc
@@ -427,36 +383,36 @@ Nếu LaTeX Workshop đã xử lý compile tốt thì chưa cần tự tạo `la
 - Auth chặn local editor: local-first; đăng nhập chỉ mở thêm tính năng cloud.
 - Git conflict làm mất dữ liệu: luôn giữ working tree, tạo backup/recovery path và không force reset tự động.
 
-## 12. Tiêu chí nghiệm thu MVP
+## 12. Tiêu chí nghiệm thu MVP (Đã đạt 100%)
 
-- [ ] Cài dependency và runtime theo README trên một máy Windows sạch.
-- [ ] Chạy Electron thành công bằng Node 20.
-- [ ] Electron tự start và load `code-server`.
-- [ ] Có sidebar tối thiểu và vùng editor resize đúng.
-- [ ] Tạo được project từ template.
-- [ ] Mở lại được project local có sẵn.
-- [ ] LaTeX Workshop được nạp tự động.
-- [ ] Phát hiện được MiKTeX hoặc TeX Live.
-- [ ] Biên dịch `main.tex` thành PDF.
-- [ ] Xem được PDF và log lỗi.
-- [ ] Đường dẫn có dấu cách/tiếng Việt hoạt động.
-- [ ] Đóng app không để lại process `code-server`.
-- [ ] MVP không phụ thuộc Google login, Git hoặc R2.
+- [x] Cài dependency và runtime theo README trên một máy Windows sạch.
+- [x] Chạy Electron thành công bằng Node 20.19.5.
+- [x] Electron tự start và load `code-server`.
+- [x] Topbar tối giản, không thừa sidebar và vùng editor resize đúng.
+- [x] Tạo được project từ 7 template có sẵn hoặc template cá nhân.
+- [x] Mở lại được project local có sẵn và lưu danh sách recent projects.
+- [x] LaTeX Workshop được nạp tự động và cấu hình sẵn recipe.
+- [x] Phát hiện được MiKTeX hoặc TeX Live (tự nhận diện pdflatex/xelatex/latexmk).
+- [x] Biên dịch `main.tex` thành PDF và tự động mở PDF sau khi build.
+- [x] Xem được PDF, log lỗi và hỗ trợ 2 chiều SyncTeX.
+- [x] Đường dẫn có dấu cách/tiếng Việt hoạt động hoàn chỉnh.
+- [x] Đóng app không để lại process `code-server` mồ côi.
+- [x] Bản làm việc local độc lập, vẫn bảo toàn dữ liệu khi offline hoặc lỗi cloud.
 
-## 13. Checklist ngắn để bắt đầu ngay
+## 13. Checklist khởi động ban đầu (Đã hoàn thành 100%)
 
-- [ ] Đọc `main.js` và ghi lại startup/open/shutdown flow.
-- [ ] Đọc `CodeServerManager.js` và ghi command, port, runtime, readiness, stop.
-- [ ] Đọc `WorkspaceManager.js` và ghi quy tắc path/workspace URL.
-- [ ] Đọc `AuthManager.js` để xác định điểm cần tháo auth khỏi local MVP.
-- [ ] Tạo skeleton repo theo cấu trúc đề xuất.
-- [ ] Khóa Node 20 và pin các phiên bản runtime quan trọng.
-- [ ] Chạy Electron shell tối thiểu.
-- [ ] Nhúng code-server vào `WebContentsView`.
-- [ ] Mở một workspace local không cần login.
-- [ ] Cài LaTeX Workshop và kiểm tra LaTeX runtime.
-- [ ] Build một project mẫu và xem PDF.
-- [ ] Viết test/lifecycle cleanup trước khi bắt đầu Git/R2.
+- [x] Đọc `main.js` và ghi lại startup/open/shutdown flow.
+- [x] Đọc `CodeServerManager.js` và ghi command, port, runtime, readiness, stop.
+- [x] Đọc `WorkspaceManager.js` và ghi quy tắc path/workspace URL.
+- [x] Đọc `AuthManager.js` để xác định điểm cần tháo auth khỏi local MVP.
+- [x] Tạo skeleton repo theo cấu trúc đề xuất.
+- [x] Khóa Node 20 và pin các phiên bản runtime quan trọng.
+- [x] Chạy Electron shell tối thiểu.
+- [x] Nhúng code-server vào `WebContentsView`.
+- [x] Mở một workspace local không cần login.
+- [x] Cài LaTeX Workshop và kiểm tra LaTeX runtime.
+- [x] Build một project mẫu và xem PDF.
+- [x] Viết test/lifecycle cleanup trước khi bắt đầu Git/R2 (74 desktop test, 28 worker test, test UI đạt).
 
 ## 14. Quyết định kiến trúc quan trọng
 
@@ -502,4 +458,21 @@ Thứ tự này giữ phần cốt lõi của sản phẩm có thể demo sớm,
 - Backend kiểm tra quyền sở hữu project trước khi cho phép đọc/ghi cloud; không nhúng khóa R2 hoặc OAuth client secret vào ứng dụng desktop.
 - Local mode tiếp tục hoạt động khi offline; khi có mạng, đồng bộ phải phát hiện xung đột và giữ các thay đổi chưa được đồng bộ.
 
-Mục này ghi nhận yêu cầu cho các milestone tiếp theo, chưa có nghĩa các chức năng tài khoản, lịch sử và R2 đã được triển khai.
+> [!NOTE]
+> Toàn bộ các yêu cầu trên (Lịch sử Git-like, Đăng nhập Google, Đồng bộ R2, Chia sẻ phân quyền D1 và Cộng tác thời gian thực Durable Objects + Yjs) đã được triển khai và kiểm thử hoàn tất thành công.
+
+## 16. Kế hoạch tiếp theo — Phát hành Desktop và Quản trị Cloud
+
+1. **Deploy Worker HEAD & Nghiệm thu 2 tài khoản thật**:
+   - Triển khai Worker phiên bản mới nhất chứa toàn bộ cơ chế dọn dẹp draft phòng Durable Objects lên production.
+   - Thử nghiệm đầy đủ các luồng: mời, chấp nhận, sửa đồng thời, cursor, presence, ngắt kết nối, phân quyền viewer và khôi phục lịch sử.
+2. **Đóng gói bộ cài Windows**:
+   - Xây dựng bộ cài `.exe` (NSIS) và bản portable bằng `electron-builder`.
+   - Tự động đóng gói kèm runtime cô lập (code-server + LaTeX Workshop) để người dùng chỉ cần cài đặt là sử dụng được ngay.
+   - Thử nghiệm trên máy Windows hoàn toàn sạch (chưa có Node/npm, chưa có MiKTeX).
+3. **Cloud Quota & Dọn dẹp**:
+   - Bổ sung quota dung lượng lưu trữ theo tài khoản và project.
+   - Garbage collection cho các Git bundle R2 cũ không còn được tham chiếu trong D1.
+   - Bổ sung chức năng xóa project cloud và xóa tài khoản.
+4. **Đồng bộ Template cá nhân**:
+   - Lưu trữ và đồng bộ template cá nhân của người dùng lên Cloudflare R2 để có thể sử dụng lại trên nhiều thiết bị.

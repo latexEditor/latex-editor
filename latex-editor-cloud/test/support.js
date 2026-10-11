@@ -52,7 +52,8 @@ export class MemoryD1 {
       sessions: [],
       projects: [],
       project_members: [],
-      invitations: []
+      invitations: [],
+      user_templates: []
     };
   }
 
@@ -137,7 +138,7 @@ class MemoryD1Statement {
       }
     }
     // Check PK uniqueness
-    const pkMap = { users: ['id'], sessions: ['token_hash'], projects: ['id'], invitations: ['id'], project_members: ['project_id', 'user_id'] };
+    const pkMap = { users: ['id'], sessions: ['token_hash'], projects: ['id'], invitations: ['id'], project_members: ['project_id', 'user_id'], user_templates: ['user_id', 'id'] };
     const pk = pkMap[table] || [];
     if (pk.length && rows.some((r) => pk.every((c) => r[c] === row[c]))) {
       throw new Error(`UNIQUE constraint failed: ${table}`);

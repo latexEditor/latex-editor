@@ -169,6 +169,7 @@ async function createWindow() {
     show: false,
     backgroundColor: '#ffffff',
     title: 'LaTeX Editor',
+    icon: config.iconPath,
     titleBarStyle: 'hidden',
     titleBarOverlay: {
       color: '#f8fafc',

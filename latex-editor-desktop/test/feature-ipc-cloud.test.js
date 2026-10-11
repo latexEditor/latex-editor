@@ -18,13 +18,15 @@ function setup(upload, options = {}) {
       restore: options.restore || (async () => ({ hash: 'b'.repeat(40), backup: 'c'.repeat(40) }))
     },
     auth: { status: () => ({ signedIn: true, user: { id: 'owner', email: 'owner@example.test' } }) },
-    cloud: { upload },
+    cloud: { upload, deleteProject: options.deleteProject, deleteProjectById: options.deleteProjectById },
     collaboration: options.collaboration,
     openProject: async () => {}
   });
   return {
     save: (...args) => handlers.get('latex:history-save')(event, ...args),
-    restore: (...args) => handlers.get('latex:history-restore')(event, ...args)
+    restore: (...args) => handlers.get('latex:history-restore')(event, ...args),
+    deleteProject: (...args) => handlers.get('latex:cloud-delete-project')(event, ...args),
+    deleteById: (...args) => handlers.get('latex:cloud-delete-by-id')(event, ...args)
   };
 }
 
@@ -79,3 +81,66 @@ test('restore is blocked before touching disk when the collaboration room is off
   await assert.rejects(restore('D:\\projects\\paper', 'b'.repeat(40)), /Cần kết nối/);
   assert.equal(restored, false);
 });
+
+test('deleting cloud project requires user confirmation and closes active collaboration', async () => {
+  let deletedProject = null;
+  let collaborationClosed = false;
+  let dialogOptions = null;
+  const collaboration = {
+    project: 'D:\\projects\\paper',
+    close: () => { collaborationClosed = true; }
+  };
+  const { deleteProject } = setup(async () => ({}), {
+    dialog: {
+      showMessageBox: async (_owner, options) => {
+        dialogOptions = options;
+        return { response: 1 }; // Confirmed
+      }
+    },
+    deleteProject: async (location) => {
+      deletedProject = location;
+      return { deleted: true, projectId: 'proj-123' };
+    },
+    collaboration
+  });
+
+  const result = await deleteProject('D:\\projects\\paper');
+  assert.equal(result.canceled, false);
+  assert.equal(result.deleted, true);
+  assert.equal(deletedProject, 'D:\\projects\\paper');
+  assert.equal(collaborationClosed, true);
+  assert.match(dialogOptions.title, /Xóa project trên Cloud/);
+});
+
+test('canceling delete cloud project dialog cancels operation without touching cloud', async () => {
+  let deletedCalled = false;
+  const { deleteProject } = setup(async () => ({}), {
+    dialog: {
+      showMessageBox: async () => ({ response: 0 }) // Canceled
+    },
+    deleteProject: async () => { deletedCalled = true; }
+  });
+
+  const result = await deleteProject('D:\\projects\\paper');
+  assert.equal(result.canceled, true);
+  assert.equal(deletedCalled, false);
+});
+
+test('deleting cloud project by id prompts confirmation and calls deleteProjectById', async () => {
+  let deletedId = null;
+  const { deleteById } = setup(async () => ({}), {
+    dialog: {
+      showMessageBox: async () => ({ response: 1 })
+    },
+    deleteProjectById: async (id) => {
+      deletedId = id;
+      return { deleted: true, projectId: id };
+    }
+  });
+
+  const result = await deleteById('proj-uuid-123', 'My Paper');
+  assert.equal(result.canceled, false);
+  assert.equal(result.deleted, true);
+  assert.equal(deletedId, 'proj-uuid-123');
+});
+

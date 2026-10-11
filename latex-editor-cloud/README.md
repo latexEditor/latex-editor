@@ -80,33 +80,56 @@ Không dùng `workers.dev` làm domain người gửi. Nếu binding hoặc `EMA
 
 ## Lưu trữ và vận hành
 
-- `auth/login/`, `auth/code/`, `auth/session/`: trạng thái đăng nhập, mã dùng một lần và token phiên dạng hash. TTL logic lần lượt 3 phút, 1 phút và 7 ngày. Google access token không được lưu; Google client secret nằm trong Worker secret.
-- `users/<hash-user-id>/projects/<uuid>.json`: manifest, tên, head, ETag và bundle hiện hành.
-- `users/<hash-user-id>/bundles/<uuid>.bundle`: toàn bộ Git history. Bản trước được giữ lại; dung lượng tăng theo số lần sync, không chỉ theo chênh lệch file.
-- Nên cấu hình lifecycle **chỉ prefix `auth/`** xóa object sau 8 ngày. Backend vẫn từ chối phiên hết hạn ngay cả khi chưa dọn object. Không áp lifecycle xóa tùy tiện cho `users/` vì có thể làm mất bundle manifest đang tham chiếu.
-- Chưa có quota theo tài khoản, garbage collection bundle, xóa tài khoản/project, backup tự động, refresh token, merge hoặc cộng tác. Theo dõi dung lượng/chi phí R2 và rate limits; cần bổ sung quota/retention trước khi mở đăng ký rộng rãi.
-- Giới hạn bundle 50 MiB, snapshot 50 MiB/5.000 file ở desktop. Server kiểm tra header/metadata bundle; desktop xác minh Git objects và đường dẫn trước khi ghi bản sao. Test chưa tải thực tế bundle cực đại trên Workers: cần load test theo plan tài khoản trước khi tăng quy mô.
-- R2 không có nghĩa là mã hóa đầu-cuối: Worker và quản trị tài khoản có thể đọc dữ liệu project. Không tải tài liệu/bí mật lên dịch vụ nếu mô hình này không phù hợp.
+- **Cơ sở dữ liệu D1 (`latex-editor-db`)**:
+  - `users`: Tài khoản người dùng (id, email, name, avatar_url).
+  - `sessions`: Quản lý phiên token băm với thời hạn 7 ngày.
+  - `projects`: ID toàn cục, tên project, commit head, bundle_key trỏ sang R2, updated_at dùng để phát hiện xung đột (`If-Match`).
+  - `project_members`: Phân quyền theo cặp `(project_id, user_id)` gồm `owner`, `editor`, `viewer`. Ngăn chặn xóa owner cuối cùng.
+  - `invitations`: Quản lý lời mời qua email hoặc link bí mật (`token_hash`), trạng thái `pending`/`accepted`/`revoked`.
+  - `user_templates`: Danh sách template cá nhân của người dùng (id, user_id, name, description, category, main_file, preview_url, storage_key, version, updated_at).
+- **Lưu trữ R2 (`latex-editor-projects`)**:
+  - `auth/login/`, `auth/code/`: Trạng thái OAuth tạm và mã trao đổi một lần (TTL lần lượt 3 phút và 1 phút, tiêu thụ bằng conditional write).
+  - `bundles/:projectId/:uuid.bundle`: Toàn bộ Git history được đóng gói thành Git bundle v2.
+  - `templates/:userId/:templateId.zip`: Lưu trữ file ZIP đóng gói template cá nhân của người dùng.
+  - Lifecycle: Chỉ cấu hình lifecycle xóa tự động đối với prefix `auth/` sau 8 ngày. Không áp lifecycle tự động cho prefix `bundles/` để tránh mất dữ liệu snapshot mà D1 đang tham chiếu.
+- **Durable Objects (`ProjectCollaborationRoom`)**:
+  - Mỗi project được điều phối bởi một Durable Object riêng biệt.
+  - Lưu trữ SQLite nội bộ: Draft tài liệu Yjs (`document:<path>`), file manifest có tombstone (`manifest:v1`), và hàng đợi thao tác đã khử trùng lặp qua operation ID.
+  - Quản lý phiên WebSocket, tự phục hồi presence từ WebSocket attachment khi hibernating/khởi động lại.
+- **Giới hạn hiện tại**:
+  - Đã có: Cộng tác thời gian thực Yjs, đồng bộ file manifest, phân quyền server, xóa project cloud an toàn (xóa Durable Object room, thu hồi bundle R2 và D1 cascade delete), đồng bộ template cá nhân qua R2/D1.
+  - Chưa có: Quota dung lượng theo tài khoản/project, garbage collection cho bundle R2 cũ mồ côi khi ghi đè nhiều lần, API xóa tài khoản người dùng, backup định kỳ R2/D1, refresh token dài hạn, auto-merge snapshot.
+  - Giới hạn bundle: 50 MiB, tối đa 5.000 file/snapshot.
 
 ## API hiện có
 
-| Route | Chức năng |
-| --- | --- |
-| `GET /health` | Trạng thái cấu hình cloud, email và cộng tác |
-| `GET /invite/:id` | Trang hướng dẫn mở mã lời mời trong desktop |
-| `GET /auth/google/start`, `GET /auth/google/callback` | Luồng Google OAuth |
-| `POST /auth/exchange` | Đổi mã một lần + PKCE lấy phiên |
-| `POST /auth/logout`, `GET /v1/me` | Thu hồi phiên / tài khoản hiện tại |
-| `GET /v1/projects?cursor=...` | Danh sách phân trang, 25 project/trang |
-| `GET /v1/projects/:id/meta` | Manifest + ETag |
-| `GET /v1/projects/:id` | Tải bundle |
-| `PUT /v1/projects/:id` | Tải lên có `If-Match` hoặc `If-None-Match: *` |
-| `GET /v1/projects/:id/collaboration` | WebSocket room đã xác thực; presence theo thời gian thực |
-| `GET /v1/projects/:id/collaboration/presence` | Danh sách thành viên đang online |
-| `GET /v1/projects/:id/members` | Danh sách thành viên và quyền |
-| `POST /v1/projects/:id/invite` | Tạo lời mời email hoặc link |
-| `GET /v1/projects/:id/invitations` | Danh sách lời mời của project |
-| `POST /v1/invitations/:id/accept` | Chấp nhận lời mời; link mời bắt buộc token |
+| Route | Phương thức | Chức năng | Phân quyền |
+| --- | --- | --- | --- |
+| `GET /health` | GET | Trạng thái cấu hình cloud, email và cộng tác | Công khai |
+| `GET /invite/:id` | GET | Trang HTML hướng dẫn mở mã lời mời trong desktop | Công khai |
+| `GET /auth/google/start` | GET | Khởi động luồng Google OAuth PKCE | Công khai |
+| `GET /auth/google/callback` | GET | Nhận callback Google và chuyển tiếp về loopback desktop | Công khai |
+| `POST /auth/exchange` | POST | Đổi mã một lần + PKCE lấy token phiên | Công khai |
+| `POST /auth/logout` | POST | Thu hồi phiên đăng nhập hiện tại | Đã xác thực |
+| `GET /v1/me` | GET | Lấy thông tin tài khoản đang đăng nhập | Đã xác thực |
+| `GET /v1/projects?cursor=...` | GET | Danh sách project phân trang (25 project/trang) | Đã xác thực |
+| `PUT /v1/projects/:id` | PUT | Tạo project mới (`If-None-Match: *`) hoặc Cập nhật snapshot (`If-Match`) | Owner / Editor |
+| `DELETE /v1/projects/:id` | DELETE | Xóa project khỏi Cloud (xóa DO room, purge R2 bundles, D1 cascade delete) | Owner |
+| `GET /v1/projects/:id` | GET | Tải Git bundle đầy đủ của project | Thành viên |
+| `GET /v1/projects/:id/meta` | GET | Lấy manifest, head commit, updated_at, role và ETag | Thành viên |
+| `GET /v1/projects/:id/members` | GET | Danh sách thành viên và vai trò | Thành viên |
+| `DELETE /v1/projects/:id/members/:userId` | DELETE | Xóa thành viên khỏi project (hoặc tự rời project) | Owner (hoặc chính user) |
+| `POST /v1/projects/:id/invite` | POST | Tạo lời mời qua email hoặc tạo link bí mật (`id:token`) | Owner |
+| `GET /v1/projects/:id/invitations` | GET | Danh sách lời mời đang có của project | Owner |
+| `POST /v1/projects/:id/invitations/:id/revoke` | POST | Thu hồi lời mời đang chờ | Owner |
+| `POST /v1/invitations/:id/accept` | POST | Chấp nhận lời mời (link mời cần kèm token trong body) | Đã xác thực |
+| `POST /v1/invitations/:id/decline` | POST | Từ chối lời mời qua email | Đã xác thực |
+| `GET /v1/projects/:id/collaboration` | GET (WS) | Kết nối WebSocket vào phòng cộng tác Yjs & Presence | Thành viên |
+| `GET /v1/projects/:id/collaboration/presence` | GET | Xem danh sách thành viên đang online | Thành viên |
+| `GET /v1/templates` | GET | Lấy danh sách template cá nhân trên cloud của user | Đã xác thực |
+| `PUT /v1/templates/:id` | PUT | Tải lên file ZIP đóng gói template cá nhân và lưu metadata | Đã xác thực |
+| `GET /v1/templates/:id` | GET | Tải xuống file ZIP template cá nhân từ R2 | Đã xác thực |
+| `DELETE /v1/templates/:id` | DELETE | Xóa template cá nhân khỏi R2 và D1 | Đã xác thực |
 
 Các route tài khoản/project dùng Bearer token. Xung đột ghi trả `409`, phiên thiếu/hết hạn trả `401`. Backend hiện dành cho desktop; web app tương lai cần thiết kế thêm browser session/CORS/CSRF, không đưa token này tùy tiện vào localStorage.
 

@@ -181,6 +181,14 @@ export class ProjectCollaborationRoom {
       return json({ disconnected });
     }
 
+    if (url.pathname === '/destroy' && request.method === 'POST') {
+      for (const socket of this.sockets()) {
+        try { socket.close(4003, 'Project deleted'); } catch {}
+      }
+      await this.state.storage.deleteAll();
+      return json({ destroyed: true });
+    }
+
     if (url.pathname !== '/connect' || request.method !== 'GET') return json({ error: 'Không tìm thấy phòng cộng tác.' }, 404);
     if (request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') return json({ error: 'Cần kết nối WebSocket.' }, 426);
 

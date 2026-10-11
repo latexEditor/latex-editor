@@ -98,12 +98,13 @@ if (-not $hasLoopbackPatch -or -not $hasUrlSeparatorPatch) {
   throw "Could not patch the code-server path proxy: $pathProxy"
 }
 $patchedPathProxyContents | Set-Content -Encoding UTF8 -NoNewline -LiteralPath $pathProxy
-$wrapperContents = @"
+$wrapperContents = @'
 @echo off
 setlocal
-set "PATH=$nodeHome;%PATH%"
-"$nodeHome\node.exe" "$entry" %*
-"@
+set "RUNTIME_DIR=%~dp0"
+set "PATH=%RUNTIME_DIR%node20;%PATH%"
+"%RUNTIME_DIR%node20\node.exe" "%RUNTIME_DIR%npm-global\node_modules\code-server\out\node\entry.js" %*
+'@
 $wrapperContents | Set-Content -Encoding ASCII -Path $wrapper
 & $wrapper --version
 if ($LASTEXITCODE -ne 0) { throw 'code-server verification failed.' }

@@ -63,6 +63,10 @@ class WorkspaceManager {
     return this.personalTemplates.saveProject(location, name, this.#detectLatexEngine(location));
   }
 
+  deletePersonalTemplate(templateId) {
+    return this.personalTemplates.deleteTemplate(templateId);
+  }
+
   ensureWelcomeProject() {
     this.initialize();
     const recent = this.listRecent().find((item) => item.exists);

@@ -40,6 +40,14 @@ contextBridge.exposeInMainWorld('latexEditor', {
   cloudAcceptInvitation: (invitationId, token) => ipcRenderer.invoke('latex:cloud-accept-invitation', invitationId, token),
   cloudMyInvitations: () => ipcRenderer.invoke('latex:cloud-my-invitations'),
   cloudDeclineInvitation: (invitationId) => ipcRenderer.invoke('latex:cloud-decline-invitation', invitationId),
+  cloudDeleteProject: (project) => ipcRenderer.invoke('latex:cloud-delete-project', project),
+  cloudDeleteById: (id, name) => ipcRenderer.invoke('latex:cloud-delete-by-id', id, name),
+  templateCloudList: () => ipcRenderer.invoke('latex:template-cloud-list'),
+  templateCloudUpload: (templateId) => ipcRenderer.invoke('latex:template-cloud-upload', templateId),
+  templateCloudDownload: (templateId) => ipcRenderer.invoke('latex:template-cloud-download', templateId),
+  templateCloudDelete: (templateId, templateName) => ipcRenderer.invoke('latex:template-cloud-delete', templateId, templateName),
+  templateCloudSyncAll: () => ipcRenderer.invoke('latex:template-cloud-sync-all'),
+  templateDeleteLocal: (templateId, templateName) => ipcRenderer.invoke('latex:template-delete-local', templateId, templateName),
   onStateChanged: (callback) => {
     const listener = (_event, state) => callback(state);
     ipcRenderer.on('latex:state-changed', listener);

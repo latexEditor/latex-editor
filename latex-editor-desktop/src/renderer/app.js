@@ -170,6 +170,45 @@ async function loadTemplates(selectedTemplateId = null) {
     metadata.className = 'template-metadata';
     metadata.textContent = `${template.language} · ${template.engine === 'xelatex' ? 'XeLaTeX' : 'pdfLaTeX'}${template.personal ? ' · Cá nhân' : ''}`;
     content.append(name, description, metadata);
+    if (template.personal) {
+      const actions = document.createElement('div');
+      actions.className = 'template-option-actions';
+
+      const uploadBtn = document.createElement('button');
+      uploadBtn.type = 'button';
+      uploadBtn.textContent = '☁ Tải lên Cloud';
+      uploadBtn.title = 'Lưu mẫu này lên Cloudflare R2';
+      uploadBtn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        uploadBtn.disabled = true;
+        try {
+          await api.templateCloudUpload(template.id);
+          window.alert(`Đã tải mẫu “${template.name}” lên Cloud.`);
+        } catch (err) {
+          window.alert(err.message);
+        } finally {
+          uploadBtn.disabled = false;
+        }
+      });
+
+      const delBtn = document.createElement('button');
+      delBtn.type = 'button';
+      delBtn.className = 'btn-danger';
+      delBtn.textContent = 'Xóa';
+      delBtn.title = 'Xóa mẫu khỏi máy tính';
+      delBtn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const res = await api.templateDeleteLocal(template.id, template.name);
+        if (!res.canceled) {
+          await loadTemplates();
+        }
+      });
+
+      actions.append(uploadBtn, delBtn);
+      content.append(actions);
+    }
     radio.addEventListener('change', updateTemplateNote);
     label.append(preview, radio, content);
     container.append(label);
@@ -179,6 +218,24 @@ async function loadTemplates(selectedTemplateId = null) {
 
 document.querySelector('#template-search').addEventListener('input', filterTemplates);
 document.querySelector('#template-category').addEventListener('change', filterTemplates);
+document.querySelector('#sync-templates')?.addEventListener('click', async (event) => {
+  const button = event.currentTarget;
+  button.disabled = true;
+  errorBox.textContent = '';
+  try {
+    const auth = await api.authStatus();
+    if (!auth.signedIn) {
+      throw new Error('Hãy đăng nhập bằng Google trong mục “Tài khoản” trước khi đồng bộ mẫu.');
+    }
+    const result = await api.templateCloudSyncAll();
+    await loadTemplates();
+    window.alert(`Đồng bộ thành công! Đã tải lên ${result.uploaded} mẫu mới, tải về ${result.downloaded} mẫu từ Cloud.`);
+  } catch (error) {
+    errorBox.textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+});
 document.querySelector('#import-template').addEventListener('click', async (event) => {
   const button = event.currentTarget;
   const name = window.prompt('Tên template (để trống sẽ dùng tên file ZIP):', '');

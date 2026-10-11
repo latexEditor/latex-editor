@@ -426,3 +426,20 @@ dialog .feature-note { font-size: 12px; margin-bottom: 14px; }
   margin-left: 3px;
   box-sizing: border-box;
 }
+
+.cloud-templates-card {
+  padding: 14px; margin: 16px 0 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;
+}
+.cloud-templates-header {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px;
+}
+.cloud-templates-header h3 {
+  margin: 0; font-size: 14px; font-weight: 600; color: #1e293b;
+}
+.template-option-actions {
+  display: flex; align-items: center; gap: 6px; margin-top: 6px;
+}
+.template-option-actions button {
+  padding: 3px 8px; font-size: 11px;
+}
+

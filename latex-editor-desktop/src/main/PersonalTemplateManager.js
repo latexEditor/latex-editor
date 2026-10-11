@@ -2,6 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { pipeline } = require('node:stream/promises');
+const { crc32, deflateRawSync } = require('node:zlib');
 const yauzl = require('yauzl');
 
 const MAX_FILES = 500;
@@ -9,6 +10,67 @@ const MAX_TOTAL_BYTES = 50 * 1024 * 1024;
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const EXCLUDED_DIRS = new Set(['.git', '.latex-editor', '.vscode', 'build', 'node_modules']);
 const SECRET_FILE = /^(?:\.env(?:\..*)?|.*\.(?:pem|key|p12))$/i;
+
+function buildZip(files) {
+  const localHeaders = [];
+  const centralHeaders = [];
+  let offset = 0;
+  for (const file of files) {
+    const nameBuf = Buffer.from(file.path.replace(/\\/g, '/'), 'utf8');
+    const uncompressedSize = file.data.length;
+    const crc = crc32(file.data);
+    const compressed = deflateRawSync(file.data);
+    const compressedSize = compressed.length;
+
+    const local = Buffer.alloc(30 + nameBuf.length);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(20, 4);
+    local.writeUInt16LE(0x0800, 6);
+    local.writeUInt16LE(8, 8);
+    local.writeUInt16LE(0, 10);
+    local.writeUInt16LE(0, 12);
+    local.writeUInt32LE(crc, 14);
+    local.writeUInt32LE(compressedSize, 18);
+    local.writeUInt32LE(uncompressedSize, 22);
+    local.writeUInt16LE(nameBuf.length, 26);
+    local.writeUInt16LE(0, 28);
+    nameBuf.copy(local, 30);
+    localHeaders.push(local, compressed);
+
+    const central = Buffer.alloc(46 + nameBuf.length);
+    central.writeUInt32LE(0x02014b50, 0);
+    central.writeUInt16LE(20, 4);
+    central.writeUInt16LE(20, 6);
+    central.writeUInt16LE(0x0800, 8);
+    central.writeUInt16LE(8, 10);
+    central.writeUInt16LE(0, 12);
+    central.writeUInt16LE(0, 14);
+    central.writeUInt32LE(crc, 16);
+    central.writeUInt32LE(compressedSize, 20);
+    central.writeUInt32LE(uncompressedSize, 24);
+    central.writeUInt16LE(nameBuf.length, 28);
+    central.writeUInt16LE(0, 30);
+    central.writeUInt16LE(0, 32);
+    central.writeUInt16LE(0, 34);
+    central.writeUInt16LE(0, 36);
+    central.writeUInt32LE(0, 38);
+    central.writeUInt32LE(offset, 42);
+    nameBuf.copy(central, 46);
+    centralHeaders.push(central);
+    offset += local.length + compressedSize;
+  }
+  const centralDirSize = centralHeaders.reduce((sum, h) => sum + h.length, 0);
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0);
+  eocd.writeUInt16LE(0, 4);
+  eocd.writeUInt16LE(0, 6);
+  eocd.writeUInt16LE(files.length, 8);
+  eocd.writeUInt16LE(files.length, 10);
+  eocd.writeUInt32LE(centralDirSize, 12);
+  eocd.writeUInt32LE(offset, 16);
+  eocd.writeUInt16LE(0, 20);
+  return Buffer.concat([...localHeaders, ...centralHeaders, eocd]);
+}
 
 class PersonalTemplateManager {
   constructor(directory, dependencies = {}) {
@@ -49,6 +111,60 @@ class PersonalTemplateManager {
     return candidate;
   }
 
+  deleteTemplate(templateId) {
+    const target = this.resolve(templateId);
+    if (!target) throw new Error('Không tìm thấy template.');
+    this.#removeOwned(target);
+    return { deleted: true, templateId };
+  }
+
+  exportZipBuffer(templateId) {
+    const target = this.resolve(templateId);
+    if (!target) throw new Error('Không tìm thấy template.');
+    const metadata = JSON.parse(this.fs.readFileSync(path.join(target, 'template.json'), 'utf8'));
+
+    const files = [];
+    const collect = (dir) => {
+      for (const entry of this.fs.readdirSync(dir, { withFileTypes: true })) {
+        const absolute = path.join(dir, entry.name);
+        const relative = path.relative(target, absolute);
+        if (!this.#allowed(relative)) continue;
+        const stat = this.fs.statSync(absolute);
+        if (stat.isDirectory()) {
+          collect(absolute);
+        } else if (stat.isFile()) {
+          files.push({
+            path: relative,
+            data: this.fs.readFileSync(absolute)
+          });
+        }
+      }
+    };
+    collect(target);
+    const buffer = buildZip(files);
+    return {
+      id: templateId,
+      name: metadata.name,
+      engine: metadata.engine || 'pdflatex',
+      description: metadata.description || '',
+      buffer
+    };
+  }
+
+  async importFromBuffer(buffer, name = '', targetId = null) {
+    if (!Buffer.isBuffer(buffer) || buffer.length > MAX_TOTAL_BYTES) {
+      throw new Error('Dữ liệu template không hợp lệ hoặc vượt quá 50 MiB.');
+    }
+    this.initialize();
+    const tempFile = path.join(this.directory, `.import-temp-${randomUUID()}.zip`);
+    this.fs.writeFileSync(tempFile, buffer);
+    try {
+      return await this.importZip(tempFile, name, targetId);
+    } finally {
+      this.#removeOwned(tempFile);
+    }
+  }
+
   saveProject(projectPath, name, engine = null) {
     const source = path.resolve(projectPath);
     if (!this.fs.statSync(source).isDirectory()) throw new Error('Project không còn tồn tại.');
@@ -68,7 +184,7 @@ class PersonalTemplateManager {
     }
   }
 
-  importZip(zipPath, name) {
+  importZip(zipPath, name, targetId = null) {
     const archive = path.resolve(zipPath);
     if (!/\.zip$/i.test(archive) || !this.fs.statSync(archive).isFile()) throw new Error('Hãy chọn một file ZIP hợp lệ.');
     if (this.fs.statSync(archive).size > MAX_TOTAL_BYTES) throw new Error('ZIP vượt quá giới hạn 50 MiB.');
@@ -79,7 +195,10 @@ class PersonalTemplateManager {
     return this.#extract(archive, temporary).then(() => {
       const source = this.#sourceRoot(temporary);
       const templateName = this.#cleanName(name || path.basename(archive, path.extname(archive)));
-      destination = path.join(this.directory, `personal-${randomUUID()}`);
+      destination = path.join(this.directory, targetId || `personal-${randomUUID()}`);
+      if (targetId && this.fs.existsSync(destination)) {
+        this.#removeOwned(destination);
+      }
       this.#copySafe(source, destination);
       const engine = this.#detectEngine(destination);
       this.#writeMetadata(destination, templateName, engine, 'Mẫu cá nhân được nhập từ ZIP.');

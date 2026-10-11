@@ -13,6 +13,10 @@
     "start": "npm --workspace latex-editor-desktop start",
     "test": "npm --workspace latex-editor-desktop test",
     "check": "npm --workspace latex-editor-desktop run check",
-    "setup:desktop": "npm --workspace latex-editor-desktop run setup"
+    "setup:desktop": "npm --workspace latex-editor-desktop run setup",
+    "pack": "npm --workspace latex-editor-desktop run pack",
+    "dist": "npm --workspace latex-editor-desktop run dist",
+    "build:installer": "npm --workspace latex-editor-desktop run build:installer",
+    "build:portable": "npm --workspace latex-editor-desktop run build:portable"
   }
 }
