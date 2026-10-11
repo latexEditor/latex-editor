@@ -36,6 +36,46 @@ test('writes a pdflatex fallback recipe when latexmk is unavailable', (t) => {
   assert.equal(settings['latex-workshop.view.pdf.internal.synctex.keybinding'], 'double-click');
 });
 
+test('forces silent missing-package installation for MiKTeX recipes', (t) => {
+  const manager = fixture(t);
+  manager.runtimeStatus = {
+    distribution: 'MiKTeX',
+    tools: [{ name: 'latexmk', available: true, usable: true }]
+  };
+  const project = manager.createProject('MiKTeX compiler');
+  const settingsFile = path.join(project.path, '.vscode', 'settings.json');
+  const pdflatex = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+  assert.equal(
+    pdflatex['latex-workshop.latex.tools'][0].args.includes('-pdflatex=pdflatex --enable-installer %O %S'),
+    true
+  );
+
+  fs.writeFileSync(path.join(project.path, 'main.tex'), [
+    '% !TeX program = xelatex',
+    '\\documentclass{article}',
+    '\\usepackage{fontspec}',
+    '\\begin{document}Xin chao\\end{document}'
+  ].join('\n'));
+  manager.openProject(project.path);
+
+  const xelatex = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+  assert.equal(
+    xelatex['latex-workshop.latex.tools'][0].args.includes('-pdfxelatex=xelatex --enable-installer %O %S'),
+    true
+  );
+});
+
+test('does not add MiKTeX-only arguments for other LaTeX distributions', (t) => {
+  const manager = fixture(t);
+  manager.runtimeStatus = {
+    distribution: 'TeX Live',
+    tools: [{ name: 'latexmk', available: true, usable: true }]
+  };
+  const project = manager.createProject('TeX Live compiler');
+  const settings = JSON.parse(fs.readFileSync(path.join(project.path, '.vscode', 'settings.json'), 'utf8'));
+  assert.equal(settings['latex-workshop.latex.tools'][0].args.some((arg) => arg.includes('--enable-installer')), false);
+});
+
 test('adds inverse SyncTeX defaults without replacing custom compiler settings', (t) => {
   const manager = fixture(t);
   const project = manager.createProject('Custom compiler');
@@ -167,7 +207,7 @@ test('creates each bundled template and copies nested chapter files', (t) => {
 test('Vietnamese templates use XeLaTeX and upgrade to latexmk when it becomes available', (t) => {
   const manager = fixture(t);
   manager.templateDir = path.resolve(__dirname, '../resources/templates/basic-article');
-  for (const id of ['report-vi', 'thesis-vi', 'cv-vi']) {
+  for (const id of ['report-vi', 'thesis-vi', 'cv-vi', 'presentation']) {
     manager.runtimeStatus = null;
     const project = manager.createProject(id, id);
     const settingsFile = path.join(project.path, '.vscode', 'settings.json');

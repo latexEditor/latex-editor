@@ -224,20 +224,26 @@ class WorkspaceManager {
     const latexmkUsable = Boolean(this.runtimeStatus?.tools?.find((tool) => (
       tool.name === 'latexmk' && tool.available && tool.usable !== false
     )));
+    const isMiktex = this.runtimeStatus?.distribution === 'MiKTeX';
+    const miktexDirectArgs = isMiktex ? ['--enable-installer'] : [];
     const profile = engine === 'xelatex'
       ? (latexmkUsable
         ? {
           name: 'latexmk-xelatex', recipeTools: ['latexmk-xelatex'],
           tool: {
             name: 'latexmk-xelatex', command: 'latexmk',
-            args: ['-synctex=1', '-interaction=nonstopmode', '-file-line-error', '-xelatex', '-outdir=%OUTDIR%', '%DOC%']
+            args: [
+              '-synctex=1', '-interaction=nonstopmode', '-file-line-error',
+              ...(isMiktex ? ['-pdfxelatex=xelatex --enable-installer %O %S'] : []),
+              '-xelatex', '-outdir=%OUTDIR%', '%DOC%'
+            ]
           }
         }
         : {
           name: 'xelatex', recipeTools: ['xelatex', 'xelatex'],
           tool: {
             name: 'xelatex', command: 'xelatex',
-            args: ['-synctex=1', '-interaction=nonstopmode', '-file-line-error', '-output-directory=%OUTDIR%', '%DOC%']
+            args: ['-synctex=1', '-interaction=nonstopmode', '-file-line-error', ...miktexDirectArgs, '-output-directory=%OUTDIR%', '%DOC%']
           }
         })
       : (latexmkUsable
@@ -245,14 +251,18 @@ class WorkspaceManager {
           name: 'latexmk', recipeTools: ['latexmk'],
           tool: {
             name: 'latexmk', command: 'latexmk',
-            args: ['-synctex=1', '-interaction=nonstopmode', '-file-line-error', '-pdf', '-outdir=%OUTDIR%', '%DOC%']
+            args: [
+              '-synctex=1', '-interaction=nonstopmode', '-file-line-error',
+              ...(isMiktex ? ['-pdflatex=pdflatex --enable-installer %O %S'] : []),
+              '-pdf', '-outdir=%OUTDIR%', '%DOC%'
+            ]
           }
         }
         : {
           name: 'pdflatex', recipeTools: ['pdflatex'],
           tool: {
             name: 'pdflatex', command: 'pdflatex',
-            args: ['-synctex=1', '-interaction=nonstopmode', '-file-line-error', '-output-directory=%OUTDIR%', '%DOC%']
+            args: ['-synctex=1', '-interaction=nonstopmode', '-file-line-error', ...miktexDirectArgs, '-output-directory=%OUTDIR%', '%DOC%']
           }
         });
     const settings = {
@@ -288,7 +298,8 @@ class WorkspaceManager {
         const alreadyCurrent = recipe?.[0]?.name === profile.name
           && JSON.stringify(recipe[0]?.tools) === JSON.stringify(profile.recipeTools)
           && currentTools?.[0]?.name === profile.tool.name
-          && currentTools[0]?.command === profile.tool.command;
+          && currentTools[0]?.command === profile.tool.command
+          && JSON.stringify(currentTools[0]?.args) === JSON.stringify(profile.tool.args);
         let migrated = current;
         if (current['latex-workshop.view.pdf.internal.synctex.keybinding'] === undefined) {
           migrated = {
