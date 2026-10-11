@@ -129,7 +129,7 @@ function renderProjectList(container, projects, errorSelector) {
   }
 }
 
-async function loadTemplates() {
+async function loadTemplates(selectedTemplateId = null) {
   projectTemplates = await api.listTemplates();
   document.querySelector('#template-search').value = '';
   const categories = document.querySelector('#template-category');
@@ -142,17 +142,24 @@ async function loadTemplates() {
     label.className = 'template-option';
     const preview = document.createElement('span');
     preview.className = 'template-preview';
-    const image = document.createElement('img');
-    image.src = new URL(`../../resources/templates/${encodeURIComponent(template.id)}/preview.png`, window.location.href).href;
-    image.alt = `Xem trước mẫu ${template.name}`;
-    image.loading = 'lazy';
-    image.decoding = 'async';
-    preview.append(image);
+    if (template.previewDataUrl || !template.personal) {
+      const image = document.createElement('img');
+      image.src = template.previewDataUrl || new URL(`../../resources/templates/${encodeURIComponent(template.id)}/preview.png`, window.location.href).href;
+      image.alt = `Xem trước mẫu ${template.name}`;
+      image.loading = 'lazy';
+      image.decoding = 'async';
+      preview.append(image);
+    } else {
+      const placeholder = document.createElement('span');
+      placeholder.className = 'template-preview-placeholder';
+      placeholder.textContent = 'Template cá nhân';
+      preview.append(placeholder);
+    }
     const radio = document.createElement('input');
     radio.type = 'radio';
     radio.name = 'project-template';
     radio.value = template.id;
-    radio.checked = index === 0;
+    radio.checked = selectedTemplateId ? template.id === selectedTemplateId : index === 0;
     const content = document.createElement('span');
     content.className = 'template-content';
     const name = document.createElement('strong');
@@ -161,7 +168,7 @@ async function loadTemplates() {
     description.textContent = template.description;
     const metadata = document.createElement('small');
     metadata.className = 'template-metadata';
-    metadata.textContent = `${template.language} · ${template.engine === 'xelatex' ? 'XeLaTeX' : 'pdfLaTeX'}`;
+    metadata.textContent = `${template.language} · ${template.engine === 'xelatex' ? 'XeLaTeX' : 'pdfLaTeX'}${template.personal ? ' · Cá nhân' : ''}`;
     content.append(name, description, metadata);
     radio.addEventListener('change', updateTemplateNote);
     label.append(preview, radio, content);
@@ -172,6 +179,37 @@ async function loadTemplates() {
 
 document.querySelector('#template-search').addEventListener('input', filterTemplates);
 document.querySelector('#template-category').addEventListener('change', filterTemplates);
+document.querySelector('#import-template').addEventListener('click', async (event) => {
+  const button = event.currentTarget;
+  const name = window.prompt('Tên template (để trống sẽ dùng tên file ZIP):', '');
+  if (name === null) return;
+  button.disabled = true;
+  errorBox.textContent = '';
+  try {
+    const template = await api.importTemplate(name.trim());
+    if (template) await loadTemplates(template.id);
+  } catch (error) {
+    errorBox.textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+});
+document.querySelector('#save-project-template').addEventListener('click', async (event) => {
+  if (!currentState.project) return;
+  const button = event.currentTarget;
+  const name = window.prompt('Tên template cá nhân:', currentState.project.name);
+  if (name === null) return;
+  button.disabled = true;
+  errorBox.textContent = '';
+  try {
+    const template = await api.saveProjectAsTemplate(currentState.project.path, name.trim());
+    await loadTemplates(template.id);
+  } catch (error) {
+    errorBox.textContent = error.message;
+  } finally {
+    button.disabled = !currentState.project;
+  }
+});
 
 function samePath(left, right) {
   return String(left || '').toLowerCase() === String(right || '').toLowerCase();
@@ -228,6 +266,7 @@ function renderState(next) {
   for (const id of ['new-project', 'open-project', 'recent-projects', 'welcome-new', 'welcome-open']) {
     document.getElementById(id).disabled = !ready;
   }
+  document.querySelector('#save-project-template').disabled = !next.project;
   refreshRecentProjects().catch((error) => { document.querySelector('#welcome-error').textContent = error.message; });
 }
 

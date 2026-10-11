@@ -15,7 +15,11 @@ function setup({ signedIn = true, uploadError = null } = {}) {
     workspaceManager: {
       createProject: () => { calls.push('create'); return project; },
       listRecent: () => [], listTemplates: () => [], forgetProject: () => [],
-      getProjectLocation: (value) => value, openProject: () => project
+      getProjectLocation: (value) => value, openProject: () => project,
+      saveProjectAsTemplate: (projectPath, name) => {
+        calls.push(['save-template', projectPath, name]);
+        return { id: 'personal-template', name };
+      }
     },
     runtimeManager: { getStatus: () => ({}) },
     auth: { status: () => ({ signedIn }) },
@@ -29,7 +33,11 @@ function setup({ signedIn = true, uploadError = null } = {}) {
     openProject: async () => { calls.push('open'); },
     closeProject: () => {}, hideEditor: () => {}, showEditor: () => {}, getState: () => ({})
   });
-  return { create: handlers.get('latex:create-project'), calls };
+  return {
+    create: handlers.get('latex:create-project'),
+    saveTemplate: handlers.get('latex:save-project-template'),
+    calls
+  };
 }
 
 test('new projects require sign-in before creating local files', async () => {
@@ -52,4 +60,11 @@ test('cloud failure keeps and opens the recoverable local project', async () => 
   assert.deepEqual(calls, ['create', 'upload', 'open']);
   assert.match(result.cloudWarning, /R2 unavailable/);
   assert.equal(result.exists, true);
+});
+
+test('saves an opened project as a personal template without cloud access', async () => {
+  const { saveTemplate, calls } = setup({ signedIn: false });
+  const template = await saveTemplate({}, 'D:\\projects\\Paper', 'My paper');
+  assert.equal(template.id, 'personal-template');
+  assert.deepEqual(calls, [['save-template', 'D:\\projects\\Paper', 'My paper']]);
 });

@@ -2,19 +2,24 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { URL } = require('node:url');
 const { PROJECT_TEMPLATES } = require('./ProjectTemplates');
+const { PersonalTemplateManager } = require('./PersonalTemplateManager');
 
 class WorkspaceManager {
-  constructor({ projectsDir, settingsFile, templateDir }, dependencies = {}) {
+  constructor({ projectsDir, settingsFile, templateDir, personalTemplatesDir }, dependencies = {}) {
     this.projectsDir = path.resolve(projectsDir);
     this.settingsFile = path.resolve(settingsFile);
     this.templateDir = path.resolve(templateDir);
     this.fs = dependencies.fs || fs;
     this.runtimeStatus = dependencies.runtimeStatus || null;
+    this.personalTemplates = dependencies.personalTemplates || new PersonalTemplateManager(
+      personalTemplatesDir || path.join(path.dirname(this.settingsFile), 'templates'), { fs: this.fs }
+    );
   }
 
   initialize() {
     this.fs.mkdirSync(this.projectsDir, { recursive: true });
     this.fs.mkdirSync(path.dirname(this.settingsFile), { recursive: true });
+    this.personalTemplates.initialize();
   }
 
   sanitizeProjectName(name) {
@@ -27,11 +32,11 @@ class WorkspaceManager {
   }
 
   listTemplates() {
-    return PROJECT_TEMPLATES.map((template) => ({ ...template }));
+    return [...PROJECT_TEMPLATES.map((template) => ({ ...template, personal: false })), ...this.personalTemplates.list()];
   }
 
   createProject(name, templateId = 'basic-article') {
-    const template = PROJECT_TEMPLATES.find((item) => item.id === templateId);
+    const template = this.listTemplates().find((item) => item.id === templateId);
     if (!template) {
       throw new Error('Mẫu project không hợp lệ.');
     }
@@ -39,13 +44,23 @@ class WorkspaceManager {
     const cleanName = this.sanitizeProjectName(name);
     const projectPath = path.join(this.projectsDir, cleanName);
     if (this.fs.existsSync(projectPath)) throw new Error(`Project “${cleanName}” đã tồn tại.`);
-    const source = templateId === 'basic-article'
-      ? this.templateDir
-      : path.join(path.dirname(this.templateDir), templateId);
+    const source = template.personal
+      ? this.personalTemplates.resolve(templateId)
+      : (templateId === 'basic-article' ? this.templateDir : path.join(path.dirname(this.templateDir), templateId));
     this.fs.cpSync(source, projectPath, { recursive: true, errorOnExist: true, force: false });
+    if (template.personal) this.fs.rmSync(path.join(projectPath, 'template.json'), { force: true });
     this.#writeLatexSettings(projectPath, template.engine);
     this.remember(projectPath);
     return this.describe(projectPath);
+  }
+
+  importTemplateZip(zipPath, name) {
+    return this.personalTemplates.importZip(zipPath, name);
+  }
+
+  saveProjectAsTemplate(projectPath, name) {
+    const location = this.getProjectLocation(projectPath);
+    return this.personalTemplates.saveProject(location, name, this.#detectLatexEngine(location));
   }
 
   ensureWelcomeProject() {

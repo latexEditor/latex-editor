@@ -64,7 +64,13 @@
       <label for="new-project-name">Tên project</label>
       <input id="new-project-name" maxlength="100" placeholder="Ví dụ: Báo cáo tốt nghiệp" autocomplete="off">
       <section class="template-fieldset" aria-labelledby="template-library-label">
-        <h3 id="template-library-label">Mẫu tài liệu</h3>
+        <div class="template-library-header">
+          <h3 id="template-library-label">Mẫu tài liệu</h3>
+          <div class="template-library-actions">
+            <button id="import-template" type="button" title="Nhập template từ file ZIP">Nhập ZIP</button>
+            <button id="save-project-template" type="button" title="Lưu project đang mở thành template cá nhân">Lưu project làm mẫu</button>
+          </div>
+        </div>
         <div class="template-filters">
           <div><label for="template-search">Tìm mẫu</label><input id="template-search" type="search" placeholder="Tên mẫu, ngôn ngữ…" autocomplete="off"></div>
           <div><label for="template-category">Loại tài liệu</label><select id="template-category"><option value="">Tất cả</option></select></div>

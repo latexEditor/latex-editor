@@ -33,6 +33,8 @@ Xem thêm [docs/development.md](docs/development.md) và [docs/architecture.md](
 
 - **Project mới**: yêu cầu đăng nhập; app tạo bản làm việc local, lập phiên bản đầu tiên và tự tải toàn bộ source/lịch sử lên R2. Thư viện 7 mẫu có ảnh xem trước kết quả PDF, tìm kiếm có/không dấu và lọc theo loại tài liệu. Gồm Bài báo, Báo cáo, Slide Beamer, Tài liệu tối giản, Báo cáo tiếng Việt, Luận văn tiếng Việt và CV tiếng Việt.
 - Mỗi mẫu hiển thị ngôn ngữ và compiler. Ba mẫu tiếng Việt được cấu hình sẵn XeLaTeX và font Latin Modern Roman; chạy hai lượt để cập nhật mục lục/tham chiếu. Cấu hình XeLaTeX được giữ khi mở lại project.
+- Trong hộp **Project mới**, bấm **Nhập ZIP** để thêm template hoặc **Lưu project làm mẫu** để tái sử dụng project đang mở. Template cá nhân nằm ở `%APPDATA%\LatexEditor\templates`, có thể kèm `preview.png`, và chỉ được lưu trên máy hiện tại (chưa đồng bộ R2).
+- ZIP có thể đặt `main.tex` ở gốc hoặc trong một thư mục bọc duy nhất. App giới hạn 500 file, 50 MiB tổng và 10 MiB mỗi file; từ chối đường dẫn vượt thư mục, file mã hóa/symlink, đồng thời bỏ `.git`, `.vscode`, `.latex-editor`, `build`, `node_modules`, `.env*` và khóa riêng.
 - Nếu thiếu compiler của mẫu, hộp tạo project hiển thị hướng dẫn; vẫn có thể tạo để soạn nội dung. Mẫu luận văn là cấu trúc chung, cần điều chỉnh theo yêu cầu của trường.
 - **Gần đây**: tìm theo tên/đường dẫn và mở lại tối đa 12 project gần nhất, kể cả sau khi khởi động lại app. Trang trống hiển thị 5 project gần nhất để mở nhanh.
 - **Vị trí** mở thư mục project trong File Explorer. **Mở nơi lưu project** mở thư mục gốc, mặc định là `%APPDATA%\LatexEditor\projects` (có thể thay đổi bằng `LATEX_EDITOR_PROJECTS_DIR`). Hộp thoại luôn hiển thị đường dẫn thực tế đang dùng.

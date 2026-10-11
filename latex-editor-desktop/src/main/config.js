@@ -22,5 +22,6 @@ module.exports = {
   sessionFile: path.join(appDataRoot, 'auth-session.bin'),
   runtimeStatusFile: path.join(appDataRoot, 'runtime-status.json'),
   apiUrl: process.env.LATEX_EDITOR_API_URL || defaultApiUrl,
+  personalTemplatesDir: path.join(appDataRoot, 'templates'),
   templateDir: path.join(rootDir, 'resources', 'templates', 'basic-article')
 };

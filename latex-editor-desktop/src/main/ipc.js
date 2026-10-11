@@ -2,17 +2,41 @@ const { BrowserWindow, shell } = require('electron');
 
 function registerIpc({ ipcMain, dialog, workspaceManager, runtimeManager, auth, cloud, openProject, closeProject, hideEditor, showEditor, togglePresencePopover = () => false, getState }) {
   let choosingProject = false;
+  let choosingTemplate = false;
   const channels = [
     'latex:get-state', 'latex:list-projects', 'latex:create-project',
     'latex:choose-project', 'latex:open-project', 'latex:get-runtime-status',
     'latex:close-project', 'latex:hide-editor', 'latex:show-editor', 'latex:toggle-presence-popover',
-    'latex:list-templates', 'latex:forget-project', 'latex:reveal-project'
+    'latex:list-templates', 'latex:import-template', 'latex:save-project-template',
+    'latex:forget-project', 'latex:reveal-project'
   ];
   for (const channel of channels) ipcMain.removeHandler(channel);
 
   ipcMain.handle('latex:get-state', () => getState());
   ipcMain.handle('latex:list-projects', () => workspaceManager.listRecent());
   ipcMain.handle('latex:list-templates', () => workspaceManager.listTemplates());
+  ipcMain.handle('latex:import-template', async (event, name) => {
+    if (choosingTemplate) return null;
+    choosingTemplate = true;
+    try {
+      const owner = BrowserWindow.fromWebContents(event.sender);
+      const options = {
+        title: 'Nhập template LaTeX',
+        properties: ['openFile'],
+        filters: [{ name: 'Template ZIP', extensions: ['zip'] }]
+      };
+      const result = owner && !owner.isDestroyed()
+        ? await dialog.showOpenDialog(owner, options)
+        : await dialog.showOpenDialog(options);
+      if (result.canceled || !result.filePaths[0]) return null;
+      return workspaceManager.importTemplateZip(result.filePaths[0], name);
+    } finally {
+      choosingTemplate = false;
+    }
+  });
+  ipcMain.handle('latex:save-project-template', (_event, projectPath, name) => (
+    workspaceManager.saveProjectAsTemplate(projectPath, name)
+  ));
   ipcMain.handle('latex:forget-project', (_event, projectPath) => workspaceManager.forgetProject(projectPath));
   ipcMain.handle('latex:reveal-project', async (_event, projectPath) => {
     const error = await shell.openPath(workspaceManager.getProjectLocation(projectPath));

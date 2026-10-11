@@ -197,6 +197,19 @@ test('rejects unknown templates and does not overwrite an existing project', (t)
   assert.equal(fs.readFileSync(path.join(project.path, 'main.tex'), 'utf8'), 'User work');
 });
 
+test('creates new projects from a saved personal template', (t) => {
+  const manager = fixture(t);
+  const source = manager.createProject('Mẫu nguồn');
+  fs.mkdirSync(path.join(source.path, 'chapters'));
+  fs.writeFileSync(path.join(source.path, 'chapters', 'custom.tex'), 'Personal content');
+  const template = manager.saveProjectAsTemplate(source.path, 'Mẫu của tôi');
+
+  const project = manager.createProject('Từ mẫu cá nhân', template.id);
+  assert.equal(fs.readFileSync(path.join(project.path, 'chapters', 'custom.tex'), 'utf8'), 'Personal content');
+  assert.equal(fs.existsSync(path.join(project.path, 'template.json')), false);
+  assert.equal(manager.listTemplates().some((item) => item.id === template.id && item.personal), true);
+});
+
 test('rejects Windows reserved names before creating a project', (t) => {
   const manager = fixture(t);
   for (const name of ['CON', 'nul.tex', 'COM1', 'LPT9', '...', ' ']) {

@@ -104,6 +104,8 @@ async function run() {
 
   await click('#welcome-new');
   await waitForPage(() => document.querySelectorAll('input[name="project-template"]').length === 7, 'template choices');
+  assert.equal(await evaluate(() => document.querySelector('#import-template').disabled), false);
+  assert.equal(await evaluate(() => document.querySelector('#save-project-template').disabled), true);
   await waitForPage(() => {
     const previews = [...document.querySelectorAll('.template-preview img')];
     return previews.length === 7 && previews.every((image) => image.complete && image.naturalWidth > 0 && image.naturalHeight > 0);
@@ -346,6 +348,12 @@ async function run() {
   }
   await click('#new-project');
   await waitForPage(() => document.querySelector('#new-dialog').open && document.querySelectorAll('.template-option').length === 7, 'repeat new project');
+  assert.equal(await evaluate(() => document.querySelector('#save-project-template').disabled), false);
+  await evaluate(() => { window.prompt = () => 'Mẫu cá nhân thử nghiệm'; });
+  await click('#save-project-template');
+  await waitForPage(() => document.querySelectorAll('.template-option').length === 8, 'saved personal template');
+  assert.equal(await evaluate(() => Boolean(document.querySelector('input[value^="personal-"]:checked'))), true);
+  assert.equal(await evaluate(() => document.querySelector('input[value^="personal-"]').closest('label').querySelector('.template-preview img').src.startsWith('data:image/png;base64,')), true);
   await evaluate(() => {
     document.querySelector('#new-project-name').value = 'Báo cáo thử nghiệm';
     document.querySelector('#new-project-form').requestSubmit();
@@ -363,7 +371,7 @@ async function run() {
   // Windows display scaling can round the offscreen viewport by one CSS pixel.
   await waitForPage(() => Math.abs(window.innerWidth - 960) <= 2 && document.querySelectorAll('.project-tab').length === 7, 'compact toolbar');
   await click('#new-project');
-  await waitForPage(() => document.querySelector('#new-dialog').open && document.querySelectorAll('.template-option').length === 7, 'compact template library');
+  await waitForPage(() => document.querySelector('#new-dialog').open && document.querySelectorAll('.template-option').length === 8, 'compact template library');
   assert.equal(await evaluate(() => {
     const dialog = document.querySelector('#new-dialog');
     const rect = dialog.getBoundingClientRect();

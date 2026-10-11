@@ -6,7 +6,7 @@
 - [x] Báo cáo tiếng Việt, luận văn tiếng Việt và CV; XeLaTeX cho Unicode.
 - [x] Giữ cấu hình compiler khi mở lại project.
 - [x] Ảnh xem trước trang đầu được render từ PDF thật của từng mẫu.
-- [ ] Nhập mẫu từ ZIP và lưu project thành mẫu cá nhân.
+- [x] Nhập mẫu từ ZIP và lưu project thành mẫu cá nhân; kiểm tra đường dẫn, dung lượng, symlink và loại dữ liệu sinh ra/bí mật.
 
 ## Đợt 2 — Project dùng chung
 
