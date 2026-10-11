@@ -563,3 +563,43 @@ test('collaboration room persists a tombstoned file manifest and moves document 
   }));
   assert.equal(viewer.messages.at(-1).code, 'read_only');
 });
+
+test('snapshot reset atomically replaces the active manifest and collaborative draft', async () => {
+  const Y = await import('yjs');
+  class FakeSocket {
+    constructor(id, role) { this.attachment = { userId: id, name: id, role, joinedAt: 1 }; this.messages = []; }
+    deserializeAttachment() { return this.attachment; }
+    send(message) { this.messages.push(JSON.parse(message)); }
+  }
+  const owner = new FakeSocket('owner-user', 'owner');
+  const editor = new FakeSocket('editor-user', 'editor');
+  const values = new Map();
+  const storage = {
+    get: async (key) => values.get(key), put: async (key, value) => values.set(key, value),
+    delete: async (key) => values.delete(key)
+  };
+  const room = new ProjectCollaborationRoom({ storage, getWebSockets: () => [owner, editor] });
+  await room.webSocketMessage(owner, JSON.stringify({ type: 'manifest:subscribe', paths: ['old.tex', 'main.tex'] }));
+  values.set('document:old.tex', new Uint8Array([1]));
+  const requestId = 'snapshot-reset-request-1';
+  await room.webSocketMessage(owner, JSON.stringify({
+    type: 'filesystem:reset', requestId, paths: ['main.tex', 'chapter.tex']
+  }));
+  assert.equal(owner.messages.at(-1).type, 'filesystem:reset:ack');
+  assert.equal(values.has('document:old.tex'), false);
+  assert.equal(editor.messages.at(-1).type, 'filesystem:state');
+  assert.equal(editor.messages.at(-1).entries.find((entry) => entry.path === 'old.tex').deleted, true);
+
+  const document = new Y.Doc();
+  document.getText('content').insert(0, 'Restored snapshot');
+  const update = Buffer.from(Y.encodeStateAsUpdate(document)).toString('base64');
+  await room.webSocketMessage(owner, JSON.stringify({
+    type: 'document:reset', requestId, path: 'main.tex', update
+  }));
+  assert.equal(owner.messages.at(-1).type, 'document:reset:ack');
+  assert.equal(editor.messages.at(-1).type, 'document:replace');
+  const restarted = new ProjectCollaborationRoom({ storage, getWebSockets: () => [owner, editor] });
+  await restarted.webSocketMessage(editor, JSON.stringify({ type: 'document:subscribe', path: 'main.tex' }));
+  assert.equal(editor.messages.at(-1).type, 'document:state');
+  assert.ok(editor.messages.at(-1).update);
+});

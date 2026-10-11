@@ -30,7 +30,7 @@
 - [~] Phiên project dùng Durable Objects + WebSocket: room theo project xác thực thành viên, presence, cursor/selection, ngắt kết nối khi thu hồi quyền và lưu draft Yjs theo file; còn dọn draft theo lifecycle.
 - [x] Desktop kết nối room, hiển thị người online, cursor/selection và extension code-server đồng bộ nội dung `.tex/.bib/.sty/.cls/.md`; viewer bị chặn ghi và client tự kết nối lại với exponential backoff.
 - [x] Đồng bộ tạo/xóa/đổi tên file qua manifest có revision và tombstone; hàng đợi thao tác lưu trong workspace state, gửi lại sau khi mở app và chỉ xóa khi Worker ACK theo operation ID.
-- [ ] Phân biệt bản nháp cộng tác với snapshot lịch sử; không ghi đè phiên đang sửa bằng Git bundle cũ.
+- [x] Phân biệt draft cộng tác với snapshot lịch sử: restore yêu cầu room online và quyền ghi, xác nhận số người bị ảnh hưởng, reset manifest/document rồi chờ đủ ACK trước khi upload bundle mới.
 - [ ] Thử nghiệm hai người sửa cùng dòng; thu hồi quyền và kết nối lại.
 
 ## Đợt 4 — Web và build từ xa

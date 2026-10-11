@@ -324,6 +324,55 @@ export class ProjectCollaborationRoom {
       this.acknowledgeFile(socket, event, manifest);
       return;
     }
+    if (event?.type === 'filesystem:reset' && validOperationId(event.requestId) && Array.isArray(event.paths)) {
+      const identity = connectionState(socket);
+      if (!identity || identity.role === 'viewer') {
+        this.send(socket, { type: 'error', code: 'read_only', requestId: event.requestId });
+        return;
+      }
+      const paths = [...new Set(event.paths.filter(validPath))];
+      if (paths.length !== event.paths.length || paths.length > MAX_MANIFEST_ENTRIES) {
+        this.send(socket, { type: 'error', code: 'invalid_manifest', requestId: event.requestId });
+        return;
+      }
+      const active = new Set(paths);
+      const manifest = await this.manifest();
+      const changedAt = Date.now();
+      for (const [path, entry] of Object.entries(manifest.entries)) {
+        if (!entry.deleted && !active.has(path)) {
+          manifest.entries[path] = { deleted: true, changedAt };
+          await this.state.storage.delete?.(DOCUMENT_PREFIX + path);
+        }
+      }
+      for (const path of paths) manifest.entries[path] = { deleted: false, changedAt };
+      manifest.revision += 1;
+      await this.saveManifest(manifest);
+      this.broadcast(this.manifestState(manifest), socket);
+      this.send(socket, { type: 'filesystem:reset:ack', requestId: event.requestId, revision: manifest.revision });
+      return;
+    }
+    if (event?.type === 'document:reset' && validOperationId(event.requestId) && validPath(event.path)) {
+      const identity = connectionState(socket);
+      if (!identity || identity.role === 'viewer') {
+        this.send(socket, { type: 'error', code: 'read_only', requestId: event.requestId });
+        return;
+      }
+      try {
+        const manifest = await this.manifest();
+        if (manifest.entries[event.path]?.deleted) throw new Error('document_deleted');
+        const update = decodeUpdate(event.update);
+        const doc = new Y.Doc();
+        Y.applyUpdate(doc, update);
+        const state = Y.encodeStateAsUpdate(doc);
+        if (state.byteLength > MAX_UPDATE_BYTES) throw new Error('document_too_large');
+        await this.state.storage.put(DOCUMENT_PREFIX + event.path, state);
+        this.broadcast({ type: 'document:replace', path: event.path, update: encodeUpdate(state) }, socket);
+        this.send(socket, { type: 'document:reset:ack', requestId: event.requestId, path: event.path });
+      } catch (error) {
+        this.send(socket, { type: 'error', code: error.message || 'invalid_update', requestId: event.requestId });
+      }
+      return;
+    }
     if (event?.type === 'cursor:update' && validPath(event.path) && Array.isArray(event.selections)
       && event.selections.length <= 20) {
       const identity = connectionState(socket);

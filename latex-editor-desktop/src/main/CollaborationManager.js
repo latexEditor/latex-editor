@@ -1,5 +1,6 @@
 let DefaultWebSocket = global.WebSocket;
 try { DefaultWebSocket ||= require('undici').WebSocket; } catch {}
+const { randomUUID } = require('node:crypto');
 const Y = require('yjs');
 
 const MAX_DOCUMENT_CHARS = 1024 * 1024;
@@ -33,6 +34,7 @@ class CollaborationManager {
     this.url = null;
     this.reconnectTimer = null;
     this.reconnectAttempts = 0;
+    this.pendingResets = new Map();
   }
 
   status() {
@@ -65,6 +67,11 @@ class CollaborationManager {
     this.self = null;
     this.url = null;
     this.reconnectAttempts = 0;
+    for (const reset of this.pendingResets.values()) {
+      this.clearTimeout(reset.timer);
+      reset.reject(new Error('Phiên cộng tác đã đóng trước khi reset draft hoàn tất.'));
+    }
+    this.pendingResets.clear();
     try { socket?.close(1000, 'Project closed'); } catch {}
     this.changed();
   }
@@ -136,6 +143,7 @@ class CollaborationManager {
         }
         if (message.type === 'document:state') this.#receiveDocumentState(message);
         if (message.type === 'document:update') this.#receiveDocumentUpdate(message);
+        if (message.type === 'document:replace') this.#receiveDocumentReplace(message);
         if (message.type === 'document:missing' && this.#validPath(message.path)) {
           this.documents.delete(message.path);
           this.onEditorMessage({ type: 'file:delete', path: message.path });
@@ -166,6 +174,16 @@ class CollaborationManager {
             type: 'file:ack', operationId: message.operationId, accepted: message.accepted !== false,
             code: typeof message.code === 'string' ? message.code : null, revision: message.revision
           });
+        }
+        if (['filesystem:reset:ack', 'document:reset:ack'].includes(message.type)
+          && this.#validOperationId(message.requestId)) this.#ackReset(message.requestId);
+        if (message.type === 'error' && this.#validOperationId(message.requestId)) {
+          const reset = this.pendingResets.get(message.requestId);
+          if (reset) {
+            this.pendingResets.delete(message.requestId);
+            this.clearTimeout(reset.timer);
+            reset.reject(new Error(`Worker từ chối reset draft: ${message.code || 'unknown_error'}.`));
+          }
         }
         if (message.type === 'cursor:update' && message.user?.id) {
           this.onEditorMessage({
@@ -222,8 +240,63 @@ class CollaborationManager {
     return true;
   }
 
+  resetCapability(project) {
+    if (!this.enabled || project !== this.project) return { required: false, ready: true, participants: 0 };
+    if (this.connection !== 'online' || this.socket?.readyState !== 1) {
+      return { required: true, ready: false, participants: this.participants.length, error: 'Cần kết nối phòng cộng tác trước khi khôi phục snapshot.' };
+    }
+    if (!['owner', 'editor'].includes(this.self?.role)) {
+      return { required: true, ready: false, participants: this.participants.length, error: 'Chỉ owner hoặc editor mới được khôi phục snapshot vào draft cộng tác.' };
+    }
+    return { required: true, ready: true, participants: this.participants.length };
+  }
+
+  resetDrafts(project) {
+    const capability = this.resetCapability(project);
+    if (!capability.required) return Promise.resolve({ skipped: true });
+    if (!capability.ready) return Promise.reject(new Error(capability.error));
+    const requestId = randomUUID();
+    return new Promise((resolve, reject) => {
+      const timer = this.setTimeout(() => {
+        this.pendingResets.delete(requestId);
+        reject(new Error('Worker không xác nhận reset draft trong thời gian cho phép.'));
+      }, 60_000);
+      timer?.unref?.();
+      this.pendingResets.set(requestId, { resolve, reject, timer, expected: null, acknowledged: 0 });
+      this.onEditorMessage({ type: 'draft:reset-request', requestId });
+    });
+  }
+
   handleEditorMessage(message) {
     if (!this.enabled) return false;
+    if (message?.type === 'draft:reset:begin' && this.#validOperationId(message.requestId)) {
+      if (!Array.isArray(message.paths) || message.paths.length > 5000 || message.paths.some((path) => !this.#validPath(path))) return false;
+      return this.send({ type: 'filesystem:reset', requestId: message.requestId, paths: [...new Set(message.paths)] });
+    }
+    if (message?.type === 'draft:reset:document' && this.#validOperationId(message.requestId)) {
+      if (!this.#validPath(message.path) || typeof message.text !== 'string' || message.text.length > MAX_DOCUMENT_CHARS) return false;
+      const state = this.#newDocumentState(message.path, message.text, true);
+      this.documents.set(message.path, state);
+      return this.send({
+        type: 'document:reset', requestId: message.requestId, path: message.path,
+        update: encodeUpdate(Y.encodeStateAsUpdate(state.doc))
+      });
+    }
+    if (message?.type === 'draft:reset:end' && this.#validOperationId(message.requestId)) {
+      const reset = this.pendingResets.get(message.requestId);
+      if (!reset || !Number.isSafeInteger(message.count) || message.count < 0 || message.count > 5000) return false;
+      reset.expected = message.count + 1;
+      this.#completeReset(message.requestId);
+      return true;
+    }
+    if (message?.type === 'draft:reset:failed' && this.#validOperationId(message.requestId)) {
+      const reset = this.pendingResets.get(message.requestId);
+      if (!reset) return false;
+      this.pendingResets.delete(message.requestId);
+      this.clearTimeout(reset.timer);
+      reset.reject(new Error(typeof message.error === 'string' ? message.error : 'Không đọc được snapshot từ ổ đĩa.'));
+      return true;
+    }
     if (message?.type === 'filesystem:snapshot') {
       if (!Array.isArray(message.paths) || message.paths.length > 5000 || message.paths.some((path) => !this.#validPath(path))) return false;
       return this.send({ type: 'manifest:subscribe', paths: [...new Set(message.paths)] });
@@ -261,12 +334,8 @@ class CollaborationManager {
     if (message.text.length > MAX_DOCUMENT_CHARS || !this.#validPath(message.path)) return false;
     let state = this.documents.get(message.path);
     if (!state) {
-      const doc = new Y.Doc();
-      state = { path: message.path, doc, text: doc.getText('content'), localText: message.text, ready: false };
-      doc.on('update', (update, origin) => {
-        if (origin === 'remote') return;
-        this.send({ type: origin === 'seed' ? 'document:seed' : 'document:update', path: state.path, update: encodeUpdate(update) });
-      });
+      state = this.#newDocumentState(message.path, '', false);
+      state.localText = message.text;
       this.documents.set(message.path, state);
       this.send({ type: 'document:subscribe', path: message.path });
       return true;
@@ -288,6 +357,33 @@ class CollaborationManager {
 
   #validOperationId(value) {
     return typeof value === 'string' && /^[A-Za-z0-9_-]{10,100}$/.test(value);
+  }
+
+  #newDocumentState(path, value = '', ready = false) {
+    const doc = new Y.Doc();
+    const text = doc.getText('content');
+    if (value) text.insert(0, value);
+    const state = { path, doc, text, localText: value, ready };
+    doc.on('update', (update, origin) => {
+      if (origin === 'remote') return;
+      this.send({ type: origin === 'seed' ? 'document:seed' : 'document:update', path: state.path, update: encodeUpdate(update) });
+    });
+    return state;
+  }
+
+  #ackReset(requestId) {
+    const reset = this.pendingResets.get(requestId);
+    if (!reset) return;
+    reset.acknowledged += 1;
+    this.#completeReset(requestId);
+  }
+
+  #completeReset(requestId) {
+    const reset = this.pendingResets.get(requestId);
+    if (!reset || reset.expected === null || reset.acknowledged < reset.expected) return;
+    this.pendingResets.delete(requestId);
+    this.clearTimeout(reset.timer);
+    reset.resolve({ reset: true, documents: reset.expected - 1 });
   }
 
   #replaceText(state, value, origin) {
@@ -321,6 +417,17 @@ class CollaborationManager {
     try {
       Y.applyUpdate(state.doc, decodeUpdate(message.update), 'remote');
       state.ready = true;
+      this.onEditorMessage({ type: 'document:remote', path: message.path, text: state.text.toString() });
+    } catch {}
+  }
+
+  #receiveDocumentReplace(message) {
+    if (!this.#validPath(message.path) || typeof message.update !== 'string') return;
+    try {
+      const doc = new Y.Doc();
+      Y.applyUpdate(doc, decodeUpdate(message.update), 'remote');
+      const state = this.#newDocumentState(message.path, doc.getText('content').toString(), true);
+      this.documents.set(message.path, state);
       this.onEditorMessage({ type: 'document:remote', path: message.path, text: state.text.toString() });
     } catch {}
   }

@@ -243,7 +243,10 @@ async function startup() {
     onChange: notifyState,
     onEditorMessage: (message) => collaborationBridge?.publish(message)
   });
-  registerFeatureIpc({ ipcMain, dialog, workspace: workspaceManager, history, auth: authManager, cloud, openProject: loadProject });
+  registerFeatureIpc({
+    ipcMain, dialog, workspace: workspaceManager, history, auth: authManager, cloud,
+    collaboration: collaborationManager, openProject: loadProject
+  });
   const restoredProjects = workspaceManager.listOpenProjects();
   const mostRecentOpenProject = workspaceManager.listRecent().find((recentProject) => (
     restoredProjects.some((openProject) => openProject.path.toLowerCase() === recentProject.path.toLowerCase())

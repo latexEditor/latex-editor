@@ -56,6 +56,8 @@ Mỗi snapshot tối đa 50 MiB / 5.000 file, không hỗ trợ symlink/submodul
 
 Lịch sử và liên kết cloud gắn với đường dẫn project. Khi tự di chuyển/đổi tên thư mục, app coi đó là project khác. Sao lưu cả thư mục project và `%APPDATA%\LatexEditor` nếu muốn giữ lịch sử/liên kết local.
 
+Khi khôi phục lịch sử của project đang cộng tác, app yêu cầu room online và quyền owner/editor, hiển thị số người đang online, sau đó thay manifest cùng draft Yjs bằng snapshot trên ổ đĩa. App chỉ báo hoàn tất sau khi Worker xác nhận manifest và từng document; viewer hoặc trạng thái offline bị chặn trước khi file local bị thay đổi.
+
 ## Đăng nhập và đồng bộ
 
 Bản ứng dụng dùng Worker đã deploy tại `https://latex-editor-cloud.emsidt.workers.dev`, vì vậy chạy `npm start` là có thể đăng nhập. Khi phát triển với backend khác, ghi đè URL trước khi khởi động:

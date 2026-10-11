@@ -192,3 +192,36 @@ test('filesystem manifest and file operations are relayed with viewer protection
   assert.equal(manager.handleEditorMessage({ type: 'file:create', path: 'blocked.tex', operationId: 'operation-blocked-1' }), false);
   manager.close();
 });
+
+test('restoring a snapshot replaces the manifest and waits for every draft ACK', async () => {
+  FakeWebSocket.instances = [];
+  const editorEvents = [];
+  const { manager } = fixture(undefined, { onEditorMessage: (message) => editorEvents.push(message) });
+  await manager.open('D:\\cloud');
+  const socket = FakeWebSocket.instances[0];
+  socket.emit('open');
+  socket.emit('message', { data: JSON.stringify({
+    type: 'welcome', self: { id: 'self', role: 'editor' }, participants: [{ id: 'self', role: 'editor' }]
+  }) });
+
+  const resetPromise = manager.resetDrafts('D:\\cloud');
+  const requestId = editorEvents.at(-1).requestId;
+  assert.equal(editorEvents.at(-1).type, 'draft:reset-request');
+  manager.handleEditorMessage({ type: 'draft:reset:begin', requestId, paths: ['main.tex', 'chapter.tex'] });
+  manager.handleEditorMessage({ type: 'draft:reset:document', requestId, path: 'main.tex', text: 'Restored main' });
+  manager.handleEditorMessage({ type: 'draft:reset:document', requestId, path: 'chapter.tex', text: 'Restored chapter' });
+  manager.handleEditorMessage({ type: 'draft:reset:end', requestId, count: 2 });
+  assert.deepEqual(socket.sent.slice(-3).map((message) => message.type), [
+    'filesystem:reset', 'document:reset', 'document:reset'
+  ]);
+
+  socket.emit('message', { data: JSON.stringify({ type: 'filesystem:reset:ack', requestId, revision: 8 }) });
+  socket.emit('message', { data: JSON.stringify({ type: 'document:reset:ack', requestId, path: 'main.tex' }) });
+  let settled = false;
+  resetPromise.then(() => { settled = true; });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(settled, false);
+  socket.emit('message', { data: JSON.stringify({ type: 'document:reset:ack', requestId, path: 'chapter.tex' }) });
+  assert.deepEqual(await resetPromise, { reset: true, documents: 2 });
+  manager.close();
+});

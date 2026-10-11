@@ -12,6 +12,7 @@ const remoteCursors = new Map();
 const suppressedFileEvents = new Map();
 const PENDING_FILE_OPERATIONS = 'pendingFileOperationsV1';
 const MAX_PENDING_FILE_OPERATIONS = 1000;
+const MAX_DOCUMENT_BYTES = 1024 * 1024;
 let extensionContext = null;
 let sessionRole = null;
 let fileOperationWrite = Promise.resolve();
@@ -61,6 +62,27 @@ async function exists(uri) {
 async function scanFiles() {
   const uris = await vscode.workspace.findFiles('**/*.{tex,bib,sty,cls,md}', '{**/build/**,**/.*/**}', 5000);
   return uris.map(relativeUri).filter(Boolean).sort();
+}
+
+async function resetDraftsFromDisk(requestId) {
+  try {
+    const paths = await scanFiles();
+    await post({ type: 'draft:reset:begin', requestId, paths });
+    let count = 0;
+    for (const path of paths) {
+      const uri = projectUri(path);
+      const bytes = await vscode.workspace.fs.readFile(uri);
+      if (bytes.byteLength > MAX_DOCUMENT_BYTES) throw new Error(`${path} vượt quá giới hạn 1 MiB.`);
+      await post({
+        type: 'draft:reset:document', requestId, path,
+        text: new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+      });
+      count += 1;
+    }
+    await post({ type: 'draft:reset:end', requestId, count });
+  } catch (error) {
+    await post({ type: 'draft:reset:failed', requestId, error: error.message }).catch(() => {});
+  }
 }
 
 function pendingFileOperations() {
@@ -253,6 +275,7 @@ async function poll() {
           for (const document of vscode.workspace.textDocuments) await openDocument(document);
           await post({ type: 'filesystem:snapshot', paths: await scanFiles() });
         }
+        if (event.type === 'draft:reset-request' && event.requestId) await resetDraftsFromDisk(event.requestId);
         if (['filesystem:state', 'file:create', 'file:delete', 'file:rename'].includes(event.type)) {
           await applyFileEvent(event);
         }

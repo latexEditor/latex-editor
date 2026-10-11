@@ -2,9 +2,9 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { BrowserWindow } = require('electron');
 
-function registerFeatureIpc({ ipcMain, dialog, workspace, history, auth, cloud, openProject }) {
+function registerFeatureIpc({ ipcMain, dialog, workspace, history, auth, cloud, collaboration, openProject }) {
   const shellUrl = pathToFileURL(path.resolve(__dirname, '../renderer/index.html')).toString();
-  const owner = (event) => BrowserWindow.fromWebContents(event.sender);
+  const owner = (event) => BrowserWindow?.fromWebContents?.(event.sender) || null;
   const project = (value) => {
     if (typeof value !== 'string' || !value) throw new Error('Hãy mở một project trước.');
     return workspace.getProjectLocation(value);
@@ -30,15 +30,20 @@ function registerFeatureIpc({ ipcMain, dialog, workspace, history, auth, cloud, 
     'latex:history-diff': (_event, value, hash) => history.diff(project(value), hash),
     'latex:history-restore': async (event, value, hash) => {
       const location = project(value);
+      const reset = collaboration?.resetCapability(location) || { required: false, ready: true, participants: 0 };
+      if (!reset.ready) throw new Error(reset.error);
       const confirmation = await dialog.showMessageBox(owner(event), {
         type: 'warning', title: 'Khôi phục phiên bản',
         message: 'Khôi phục nội dung project về phiên bản đã chọn?',
-        detail: 'Hãy lưu mọi tab bằng Ctrl+S trước khi tiếp tục. App sẽ lưu một bản bảo vệ các file trên ổ đĩa rồi khôi phục. Nội dung chưa lưu trong editor không nằm trong bản bảo vệ.',
-        buttons: ['Hủy', 'Lưu bản bảo vệ và khôi phục'], defaultId: 0, cancelId: 0, noLink: true
+        detail: reset.required
+          ? `Hãy lưu mọi tab bằng Ctrl+S. App sẽ tạo bản bảo vệ, khôi phục snapshot rồi thay draft cộng tác cho ${reset.participants || 1} người đang online. Thay đổi chưa lưu sẽ mất.`
+          : 'Hãy lưu mọi tab bằng Ctrl+S trước khi tiếp tục. App sẽ lưu một bản bảo vệ các file trên ổ đĩa rồi khôi phục. Nội dung chưa lưu trong editor không nằm trong bản bảo vệ.',
+        buttons: ['Hủy', reset.required ? 'Khôi phục và thay draft' : 'Lưu bản bảo vệ và khôi phục'], defaultId: 0, cancelId: 0, noLink: true
       });
       if (confirmation.response !== 1) return { canceled: true };
       const restored = await history.restore(location, hash, auth.status().user || {});
-      return syncSavedProject(location, restored);
+      const draft = await collaboration?.resetDrafts(location);
+      return syncSavedProject(location, { ...restored, draftReset: Boolean(draft?.reset) });
     },
     'latex:auth-status': () => auth.status(),
     'latex:auth-login': () => auth.login(),
