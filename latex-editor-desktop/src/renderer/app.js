@@ -288,15 +288,25 @@ function renderProjectTabs(projects, activeProject) {
     name.className = 'project-tab-name';
     name.textContent = project.name;
     openButton.append(name);
-    openButton.addEventListener('click', async () => {
+    const handleOpen = async () => {
       try {
         for (const dialog of document.querySelectorAll('dialog')) {
           if (dialog.open) dialog.close();
+        }
+        if (samePath(project.path, currentState?.project?.path)) {
+          await api.showEditor();
+          return;
         }
         await api.openProject(project.path);
       } catch (error) {
         window.alert(error.message);
       }
+    };
+
+    openButton.addEventListener('click', handleOpen);
+    tab.addEventListener('click', (event) => {
+      if (event.target.closest('.project-tab-close')) return;
+      handleOpen();
     });
 
     const closeButton = document.createElement('button');

@@ -304,21 +304,43 @@ async function applyEditorCustomizations() {
   }
 }
 
+function isSameEditorUrl(currentUrl, targetUrl) {
+  if (!currentUrl || currentUrl === 'about:blank') return false;
+  try {
+    const cur = new URL(currentUrl);
+    const tar = new URL(targetUrl);
+    if (cur.origin !== tar.origin) return false;
+    const curFolder = decodeURIComponent(cur.searchParams.get('folder') || '').replace(/\\/g, '/').toLowerCase();
+    const tarFolder = decodeURIComponent(tar.searchParams.get('folder') || '').replace(/\\/g, '/').toLowerCase();
+    return Boolean(curFolder && tarFolder && curFolder === tarFolder);
+  } catch {
+    return false;
+  }
+}
+
 async function loadProject(projectPath) {
   if (!projectPath) {
     collaborationManager?.close();
     activeProject = null;
+    shellOverlayOpen = false;
     hideEditor();
     notifyState();
     return null;
   }
+  shellOverlayOpen = false;
   activeProject = workspaceManager.openProject(projectPath);
   const target = workspaceManager.codeServerUrl(config.host, serverManager.port, activeProject.path);
   showEditor();
   notifyState();
   const currentUrl = editorView?.webContents?.getURL();
-  if (!currentUrl || currentUrl === 'about:blank' || currentUrl !== target.toString()) {
-    await editorView.webContents.loadURL(target.toString());
+  if (!isSameEditorUrl(currentUrl, target.toString())) {
+    try {
+      await editorView.webContents.loadURL(target.toString());
+    } catch (err) {
+      if (!err.message?.includes('ERR_ABORTED')) {
+        console.warn('loadURL warning:', err.message);
+      }
+    }
     await applyEditorCustomizations();
   }
   showEditor();

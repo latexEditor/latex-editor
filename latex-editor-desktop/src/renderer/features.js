@@ -232,6 +232,8 @@
                 if (res.projectId) {
                   const copy = await api.cloudDownload(res.projectId);
                   feedback('#account-feedback', `Đã tải và mở dự án ${copy.name}.`);
+                  if (accountDialog.open) accountDialog.close();
+                  await api.showEditor();
                 }
               }));
 
@@ -276,7 +278,9 @@
       download.textContent = 'Tải bản sao';
       download.addEventListener('click', () => cloudAction(async () => {
         const copy = await api.cloudDownload(project.id);
-        feedback('#account-feedback', `Đã tải ${copy.name}, kèm lịch sử phiên bản. Bấm tab trên thanh công cụ hoặc Đóng để làm việc.`);
+        feedback('#account-feedback', `Đã tải ${copy.name}, kèm lịch sử phiên bản.`);
+        if (accountDialog.open) accountDialog.close();
+        await api.showEditor();
       }));
       actions.append(download);
 
