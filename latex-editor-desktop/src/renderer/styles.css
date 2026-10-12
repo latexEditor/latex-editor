@@ -39,13 +39,14 @@ body { background: #ffffff; user-select: none; }
   height: 32px;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   padding: 0 140px 0 8px; /* 140px right padding for window controls */
   background: #f8fafc;
   border-bottom: 1px solid #e2e8f0;
   -webkit-app-region: drag;
   position: relative;
   z-index: 100;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 .topbar button,
 .topbar button *,
@@ -54,40 +55,89 @@ body { background: #ffffff; user-select: none; }
 .topbar .toolbar-button,
 .topbar .toolbar-button *,
 .topbar .feature-button,
-.topbar .feature-button * {
+.topbar .feature-button *,
+.topbar .runtime-button,
+.topbar .runtime-button *,
+.topbar .status,
+.topbar .status * {
   -webkit-app-region: no-drag;
 }
 
 /* Brand */
-.brand { display: flex; align-items: center; gap: 6px; margin-right: 2px; white-space: nowrap; cursor: default; }
-.brand strong { font-size: 12px; font-weight: 600; letter-spacing: 0.1px; color: #1e293b; }
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px;
+  margin-right: 2px;
+  white-space: nowrap;
+  cursor: default;
+  user-select: none;
+}
+.brand strong {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: -0.1px;
+  color: #1e293b;
+}
 .brand-mark {
-  display: grid; place-items: center; width: 20px; height: 20px;
-  border-radius: 4px; background: #3b82f6;
-  color: white; font: 700 11px Inter, sans-serif;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  background: #18181b;
+  color: #ffffff;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 }
-.divider { width: 1px; height: 14px; margin: 0 4px; background: #e2e8f0; }
+.divider {
+  width: 1px;
+  height: 14px;
+  margin: 0 4px;
+  background: #e2e8f0;
+  flex-shrink: 0;
+}
 
-/* Buttons */
+/* Buttons (Dialogs & Workspaces) */
 button {
-  appearance: none; border: 1px solid #cbd5e1; border-radius: 5px; color: #475569;
-  background: #ffffff; padding: 5px 12px; font: inherit; cursor: pointer;
-  transition: all 0.2s; font-size: 12px; font-weight: 500;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  appearance: none;
+  border: 1px solid #cbd5e1;
+  border-radius: 5px;
+  color: #475569;
+  background: #ffffff;
+  padding: 5px 12px;
+  font: inherit;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-size: 12px;
+  font-weight: 500;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
-button:hover { background: #f1f5f9; color: #1e293b; border-color: #94a3b8; }
+button:hover {
+  background: #f1f5f9;
+  color: #1e293b;
+  border-color: #94a3b8;
+}
 button.primary {
-  border-color: transparent; color: white;
+  border-color: transparent;
+  color: white;
   background: #3b82f6;
-  font-weight: 500; box-shadow: 0 1px 3px rgba(59, 130, 246, 0.25);
+  font-weight: 500;
+  box-shadow: 0 1px 3px rgba(59, 130, 246, 0.25);
 }
-button.primary:hover { background: #2563eb; }
+button.primary:hover {
+  background: #2563eb;
+}
 
-/* Project Switcher */
+/* Project Tabs in Topbar */
 .project-tabs {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
   min-width: 0;
   max-width: min(46vw, 680px);
   overflow-x: auto;
@@ -95,35 +145,44 @@ button.primary:hover { background: #2563eb; }
 }
 .project-tabs::-webkit-scrollbar { display: none; }
 .project-tab {
-  display: flex;
-  align-items: stretch;
-  min-width: 100px;
+  display: inline-flex;
+  align-items: center;
+  min-width: 80px;
   max-width: 175px;
-  height: 24px;
-  flex: 0 1 160px;
-  overflow: hidden;
-  background: transparent;
-  border: 1px solid transparent;
+  height: 22px;
+  padding: 0 3px 0 7px;
+  background: rgba(0, 0, 0, 0.03);
+  border: 1px solid rgba(0, 0, 0, 0.07);
   border-radius: 4px;
+  overflow: hidden;
   box-shadow: none;
+  transition: background 0.1s ease, border-color 0.1s ease;
+}
+.project-tab:hover {
+  background: rgba(0, 0, 0, 0.06);
+  border-color: rgba(0, 0, 0, 0.12);
 }
 .project-tab.active {
-  background: #e2e8f0;
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.15);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 .project-tab-open {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 5px;
   min-width: 0;
   flex: 1;
-  padding: 2px 7px;
-  border: 0;
+  padding: 0;
+  border: none;
   border-radius: 0;
   background: transparent;
   box-shadow: none;
+  cursor: pointer;
 }
-.project-tab-open:hover { border: 0; background: rgba(0,0,0,0.05); }
-.project-tab.active .project-tab-open:hover { background: transparent; }
+.project-tab-open:hover {
+  border: none;
+  background: transparent;
+}
 .project-tab-name {
   min-width: 0;
   overflow: hidden;
@@ -131,68 +190,159 @@ button.primary:hover { background: #2563eb; }
   white-space: nowrap;
   color: #334155;
   font-size: 11.5px;
+  font-weight: 500;
+}
+.project-tab.active .project-tab-name {
+  color: #0f172a;
   font-weight: 600;
 }
 .project-tab-close {
   display: grid;
   place-items: center;
-  width: 22px;
-  flex: 0 0 22px;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  margin-left: 2px;
   padding: 0;
-  border: 0;
-  border-radius: 0;
+  border: none;
+  border-radius: 3px;
   background: transparent;
   color: #94a3b8;
   box-shadow: none;
-  font-size: 14px;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  transition: all 0.1s ease;
 }
 .project-tab-close:hover {
-  background: #ef4444;
-  color: #ffffff;
-}
-.project-symbol {
-  display: grid; place-items: center; width: 17px; height: 17px; border-radius: 3px;
-  background: #eff6ff; color: #3b82f6; font: 600 9.5px Inter, sans-serif;
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
 }
 
-/* Toolbar Button */
-.toolbar-button {
-  display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; flex-shrink: 0;
-  padding: 2px 8px; height: 24px; font-size: 11.5px; border-radius: 4px;
-  border-color: transparent; background: transparent; box-shadow: none;
-}
-.toolbar-button:hover { background: #e2e8f0; border-color: transparent; }
-.toolbar-button.primary { background: #eff6ff; color: #2563eb; font-weight: 600; box-shadow: none; }
-.toolbar-button.primary:hover { background: #dbeafe; border-color: transparent; }
-.toolbar-button span { font-size: 13px; font-weight: bold; }
-#account-button > span:first-child {
-  display: inline-block;
+/* Toolbar Buttons - Clean Antigravity IDE Menu Style */
+.topbar .toolbar-button {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  height: 22px;
+  padding: 0 7px;
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 12px;
+  font-weight: 400;
   line-height: 1;
-  transform: translateY(2px);
+  color: #1e293b;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  box-shadow: none;
+  cursor: pointer;
+  transition: background-color 0.1s ease, color 0.1s ease;
+}
+.topbar .toolbar-button:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.06);
+  color: #000000;
+}
+.topbar .toolbar-button:active:not(:disabled) {
+  background: rgba(0, 0, 0, 0.1);
+}
+.topbar .toolbar-button:disabled {
+  color: #94a3b8;
+  opacity: 0.5;
+  background: transparent;
+  cursor: default;
+}
+.topbar .toolbar-button span {
+  font-size: 12px;
+  font-weight: 400;
+  color: inherit;
+  line-height: 1;
 }
 
-.presence-wrap { position: relative; display: flex; align-items: center; }
-.presence-wrap[hidden] { display: none; }
-.presence-status { cursor: pointer; }
-.presence-pulse { width: 8px; height: 8px; border-radius: 50%; background: #10b981; box-shadow: 0 0 0 3px #10b9811f; }
-.presence-status.connecting .presence-pulse { background: #f59e0b; }
-.presence-status.error .presence-pulse { background: #ef4444; }
+/* Presence */
+.presence-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.presence-wrap[hidden] {
+  display: none;
+}
+.presence-pulse {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #10b981;
+  flex-shrink: 0;
+}
+.topbar .presence-status.connecting .presence-pulse { background: #f59e0b; }
+.topbar .presence-status.error .presence-pulse { background: #ef4444; }
+
+/* Account Badge */
+.account-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 4px;
+  margin-left: 4px;
+  border-radius: 7px;
+  background: #3b82f6;
+  color: #ffffff;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
+}
+
 .spacer { flex: 1; }
 
-/* Status */
-.runtime-button {
-  border-color: transparent; background: transparent; color: #64748b; padding: 2px 8px;
-  border-radius: 4px; box-shadow: none; height: 24px; font-size: 11px;
-  display: inline-flex; align-items: center; gap: 5px;
-}
-.runtime-button:hover { background: #e2e8f0; color: #334155; border-color: transparent; }
+/* Status & Runtime in Topbar */
+.runtime-button,
 .status {
-  display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; color: #64748b;
-  font-size: 11px; font-weight: 500; background: transparent; border-radius: 4px;
-  border: 1px solid transparent; height: 24px;
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 7px;
+  margin: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  box-shadow: none;
+  color: #475569;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 11.5px;
+  font-weight: 400;
+  line-height: 1;
+  white-space: nowrap;
+  transition: background-color 0.1s ease, color 0.1s ease;
 }
-.status:hover { background: #e2e8f0; }
-.dot { width: 6px; height: 6px; flex: 0 0 6px; border-radius: 50%; background: #94a3b8; }
+.runtime-button {
+  cursor: pointer;
+}
+.runtime-button:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: #1e293b;
+}
+.status {
+  cursor: default;
+}
+.status:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+.dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 50%;
+  background: #94a3b8;
+}
 .dot.ok { background: #10b981; }
 .dot.bad { background: #ef4444; }
 .dot.checking { background: #eab308; animation: pulse 1.5s infinite; }
@@ -315,11 +465,8 @@ dialog .template-note { font-size: 12px; margin: 0; }
   .template-content { grid-column: 3; grid-row: 1; padding: 10px 10px 10px 2px; }
   .template-option small { margin-top: 3px; font-size: 11px; line-height: 1.35; }
 }
-@media (max-width: 1280px) {
+@media (max-width: 800px) {
   .brand strong, .runtime-button span:not(.dot), .status span:not(.dot) { display: none; }
-  .runtime-button { display: inline-flex; align-items: center; justify-content: center; padding: 4px; width: 25px; height: 25px; border-radius: 50%; }
-  .topbar { gap: 5px; }
-  .feature-button .feature-label { display: none; }
 }
 
 #history-dialog { width: min(960px, calc(100vw - 40px)); }
@@ -342,7 +489,6 @@ dialog .feature-note { font-size: 12px; margin-bottom: 14px; }
 .cloud-project button { flex-shrink: 0; }
 #cloud-projects { max-height: 260px; overflow-y: auto; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-.feature-button .feature-label { font-size: 11.5px; font-weight: 500; }
 [hidden] { display: none !important; }
 
 #share-dialog { width: min(720px, calc(100vw - 40px)); }

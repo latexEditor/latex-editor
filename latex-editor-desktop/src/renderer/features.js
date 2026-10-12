@@ -129,7 +129,10 @@
   }
 
   function renderAuth(auth) {
-    $('#account-label').textContent = auth.signedIn ? 'Đã đăng nhập' : 'Tài khoản';
+    $('#account-label').textContent = 'Account';
+    $('#account-button').title = auth.signedIn
+      ? `Account (${auth.user.name})`
+      : 'Account & Cloud sync';
     $('#account-description').textContent = auth.signedIn
       ? `${auth.user.name} · ${auth.user.email}`
       : auth.configured ? (auth.signingIn ? 'Hoàn tất đăng nhập trong trình duyệt vừa mở.' : 'Đăng nhập để đồng bộ project và lịch sử giữa các máy.')
@@ -643,15 +646,15 @@
     presenceButton.classList.toggle('error', ['error', 'revoked'].includes(collaboration.connection));
     const people = collaboration.participants || [];
     $('#presence-label').textContent = collaboration.connection === 'connecting'
-      ? 'Đang nối…'
+      ? 'Connecting…'
       : collaboration.connection === 'revoked'
-        ? 'Mất quyền'
+        ? 'Revoked'
         : collaboration.connection === 'online'
           ? `${people.length} online`
-          : 'Mất kết nối';
+          : 'Disconnected';
     presenceButton.title = collaboration.error || (people.length
       ? people.map((person) => `${person.name} (${person.role})`).join('\n')
-      : 'Chưa có thành viên online');
+      : 'No collaborators online');
     if (!visible) presenceButton.setAttribute('aria-expanded', 'false');
     if (next.auth) renderAuth(next.auth);
   }
