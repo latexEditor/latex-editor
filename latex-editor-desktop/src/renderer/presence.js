@@ -15,12 +15,13 @@
       initials.className = 'initials';
       initials.textContent = (person.name || '?').trim().slice(0, 1).toLocaleUpperCase('vi-VN');
       avatarWrap.append(initials);
-      if (person.avatarUrl) {
+      const userAvatar = person.avatarUrl || person.avatar_url;
+      if (userAvatar) {
         const avatar = document.createElement('img');
         avatar.className = 'avatar';
         avatar.alt = '';
         avatar.referrerPolicy = 'no-referrer';
-        avatar.src = person.avatarUrl;
+        avatar.src = userAvatar;
         avatar.addEventListener('load', () => initials.remove());
         avatar.addEventListener('error', () => avatar.remove());
         avatarWrap.prepend(avatar);

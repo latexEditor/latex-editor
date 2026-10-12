@@ -138,8 +138,9 @@
       labelEl.textContent = '';
       labelEl.hidden = true;
       if (avatarEl) {
-        if (auth.user.avatarUrl) {
-          avatarEl.innerHTML = `<img src="${encodeURI(auth.user.avatarUrl)}" class="account-avatar-img" alt="${auth.user.name}">`;
+        const userAvatar = auth.user.avatarUrl || auth.user.avatar_url || auth.user.picture;
+        if (userAvatar) {
+          avatarEl.innerHTML = `<img src="${encodeURI(userAvatar)}" class="account-avatar-img" alt="${auth.user.name}" referrerpolicy="no-referrer">`;
         } else {
           const initial = (auth.user.name || 'U').trim()[0].toUpperCase();
           avatarEl.innerHTML = `<span class="account-avatar-initial">${initial}</span>`;
@@ -231,9 +232,10 @@
                 await refreshInvitationsBadge();
                 if (res.projectId) {
                   const copy = await api.cloudDownload(res.projectId);
-                  feedback('#account-feedback', `Đã tải và mở dự án ${copy.name}.`);
                   if (accountDialog.open) accountDialog.close();
                   await api.showEditor();
+                  await api.openProject(copy.path);
+                  feedback('#account-feedback', `Đã tải và mở dự án ${copy.name}.`);
                 }
               }));
 
@@ -278,9 +280,10 @@
       download.textContent = 'Tải bản sao';
       download.addEventListener('click', () => cloudAction(async () => {
         const copy = await api.cloudDownload(project.id);
-        feedback('#account-feedback', `Đã tải ${copy.name}, kèm lịch sử phiên bản.`);
         if (accountDialog.open) accountDialog.close();
         await api.showEditor();
+        await api.openProject(copy.path);
+        feedback('#account-feedback', `Đã tải ${copy.name}, kèm lịch sử phiên bản.`);
       }));
       actions.append(download);
 
@@ -404,6 +407,9 @@
       await loadCloud();
       if (result.projectId) {
         const copy = await api.cloudDownload(result.projectId);
+        if (accountDialog.open) accountDialog.close();
+        await api.showEditor();
+        await api.openProject(copy.path);
         feedback('#account-feedback', `Đã tham gia và mở project ${copy.name}.`);
       }
     });

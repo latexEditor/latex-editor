@@ -47,10 +47,20 @@ function updateEditorPresence() {
   const collab = current.collaboration || { enabled: false, connection: 'offline', participants: [] };
   const visible = Boolean(activeProject);
   const count = collab.enabled && collab.participants?.length ? collab.participants.length : 1;
-  const status = collab.enabled ? (collab.connection || 'online') : 'online';
+  const currentUser = current.auth?.user;
+  const selfParticipant = currentUser
+    ? [{
+        id: currentUser.id || 'self',
+        name: currentUser.name,
+        role: 'owner',
+        email: currentUser.email,
+        avatarUrl: currentUser.avatar_url || currentUser.avatarUrl || currentUser.picture || null,
+        isSelf: true
+      }]
+    : [{ id: 'self', name: 'You', role: 'owner', avatarUrl: null, isSelf: true }];
   const participants = (collab.enabled && collab.participants?.length)
     ? collab.participants
-    : (current.auth?.user ? [{ id: current.auth.user.id || 'self', name: current.auth.user.name, role: 'owner' }] : [{ id: 'self', name: 'You', role: 'owner' }]);
+    : selfParticipant;
   const data = {
     visible,
     count,
@@ -144,14 +154,21 @@ const EDITOR_CUSTOM_CSS = `
     opacity: 0.85 !important;
   }
 
+  .part.titlebar {
+    position: relative !important;
+  }
+
   #latex-editor-presence-pill {
     display: inline-flex !important;
     align-items: center !important;
-    align-self: center !important;
     gap: 6px !important;
+    position: absolute !important;
+    top: 5px !important;
+    right: 142px !important;
+    z-index: 100 !important;
     height: 22px !important;
     padding: 0 9px !important;
-    margin-right: 10px !important;
+    margin: 0 !important;
     border-radius: 11px !important;
     background: rgba(16, 185, 129, 0.1) !important;
     border: 1px solid rgba(16, 185, 129, 0.3) !important;
@@ -164,6 +181,12 @@ const EDITOR_CUSTOM_CSS = `
     user-select: none !important;
     transition: all 0.15s ease !important;
     flex-shrink: 0 !important;
+    -webkit-app-region: no-drag !important;
+    pointer-events: auto !important;
+  }
+  #latex-editor-presence-pill * {
+    -webkit-app-region: no-drag !important;
+    pointer-events: auto !important;
   }
   #latex-editor-presence-pill:hover {
     background: rgba(16, 185, 129, 0.16);
@@ -194,20 +217,165 @@ const EDITOR_CUSTOM_CSS = `
   #latex-editor-presence-pill.error .presence-dot {
     background: #ef4444;
   }
+  #latex-editor-presence-popover {
+    position: fixed !important;
+    z-index: 100000 !important;
+    -webkit-app-region: no-drag !important;
+    pointer-events: auto !important;
+    width: 286px !important;
+    max-height: 320px !important;
+    overflow: auto !important;
+    padding: 10px 12px !important;
+    border: 1px solid rgba(100, 116, 139, 0.24) !important;
+    border-radius: 12px !important;
+    background: #ffffff !important;
+    color: #172033 !important;
+    box-shadow: 0 16px 40px rgba(15, 23, 42, 0.18) !important;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+  }
+  #latex-editor-presence-popover * {
+    -webkit-app-region: no-drag !important;
+    pointer-events: auto !important;
+  }
+  #latex-editor-presence-popover .presence-heading {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    padding: 2px 2px 9px !important;
+    border-bottom: 1px solid #e5e7eb !important;
+    font-size: 13px !important;
+    font-weight: 650 !important;
+  }
+  #latex-editor-presence-popover .presence-total {
+    color: #64748b !important;
+    font-size: 11.5px !important;
+    font-weight: 500 !important;
+  }
+  #latex-editor-presence-popover .presence-person {
+    display: flex !important;
+    align-items: center !important;
+    gap: 10px !important;
+    padding: 10px 2px 4px !important;
+  }
+  #latex-editor-presence-popover .presence-avatar {
+    position: relative !important;
+    display: grid !important;
+    place-items: center !important;
+    width: 36px !important;
+    height: 36px !important;
+    flex: 0 0 36px !important;
+    overflow: hidden !important;
+    border-radius: 50% !important;
+    background: #e0e7ff !important;
+    color: #4338ca !important;
+    font-size: 13px !important;
+    font-weight: 700 !important;
+  }
+  #latex-editor-presence-popover .presence-avatar img {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+  }
+  #latex-editor-presence-popover .presence-avatar::after {
+    content: '' !important;
+    position: absolute !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 8px !important;
+    height: 8px !important;
+    border: 2px solid #fff !important;
+    border-radius: 50% !important;
+    background: #10b981 !important;
+  }
+  #latex-editor-presence-popover .presence-details {
+    min-width: 0 !important;
+  }
+  #latex-editor-presence-popover .presence-name {
+    overflow: hidden !important;
+    color: #172033 !important;
+    font-size: 12.5px !important;
+    font-weight: 650 !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+  }
+  #latex-editor-presence-popover .presence-role {
+    margin-top: 2px !important;
+    color: #64748b !important;
+    font-size: 11.5px !important;
+  }
   @keyframes latex-presence-pulse { 50% { opacity: 0.4; } }
 `;
 
 const EDITOR_CUSTOM_SCRIPT = `
   (() => {
-    const hide = () => {
-      document.querySelectorAll('.codicon-account, [class*="codicon-account"]').forEach((el) => {
-        const item = el.closest('.action-item') || el;
-        item.style.setProperty('display', 'none', 'important');
-      });
-    };
-    hide();
-
     let latestData = window.__latexLatestPresence || { visible: true, count: 1, status: 'online', participants: [] };
+    let updateScheduled = false;
+
+    function closePopover() {
+      document.querySelector('#latex-editor-presence-popover')?.remove();
+      document.querySelector('#latex-editor-presence-pill')?.setAttribute('aria-expanded', 'false');
+    }
+
+    function initials(name) {
+      return String(name || 'U').trim().split(/\\s+/).slice(-2).map((part) => part[0] || '').join('').toUpperCase();
+    }
+
+    function openPopover(pill) {
+      closePopover();
+      const popover = document.createElement('div');
+      popover.id = 'latex-editor-presence-popover';
+      popover.setAttribute('role', 'dialog');
+      popover.setAttribute('aria-label', 'Danh sách người đang online');
+
+      const heading = document.createElement('div');
+      heading.className = 'presence-heading';
+      const headingText = document.createElement('span');
+      headingText.textContent = 'Đang online';
+      const total = document.createElement('span');
+      total.className = 'presence-total';
+      total.textContent = String(latestData.count || 1) + ' người';
+      heading.append(headingText, total);
+      popover.appendChild(heading);
+
+      const people = Array.isArray(latestData.participants) && latestData.participants.length
+        ? latestData.participants
+        : [{ name: 'Bạn', role: 'owner', isSelf: true }];
+      people.forEach((person) => {
+        const row = document.createElement('div');
+        row.className = 'presence-person';
+        const avatar = document.createElement('div');
+        avatar.className = 'presence-avatar';
+        avatar.textContent = initials(person.name);
+        const imageUrl = person.avatarUrl || person.avatar_url || person.avatar || person.picture;
+        if (imageUrl) {
+          const image = document.createElement('img');
+          image.alt = '';
+          image.referrerPolicy = 'no-referrer';
+          image.src = imageUrl;
+          image.addEventListener('error', () => image.remove(), { once: true });
+          avatar.appendChild(image);
+        }
+        const details = document.createElement('div');
+        details.className = 'presence-details';
+        const name = document.createElement('div');
+        name.className = 'presence-name';
+        name.textContent = String(person.name || person.email || 'Người dùng') + (person.isSelf ? ' (Bạn)' : '');
+        const role = document.createElement('div');
+        role.className = 'presence-role';
+        role.textContent = person.role === 'owner' ? 'Chủ sở hữu' : (person.role === 'editor' ? 'Có thể chỉnh sửa' : 'Người xem');
+        details.append(name, role);
+        row.append(avatar, details);
+        popover.appendChild(row);
+      });
+
+      document.body.appendChild(popover);
+      const rect = pill.getBoundingClientRect();
+      const width = popover.offsetWidth || 286;
+      const left = Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8));
+      popover.style.left = left + 'px';
+      popover.style.top = Math.min(rect.bottom + 6, window.innerHeight - popover.offsetHeight - 8) + 'px';
+      pill.setAttribute('aria-expanded', 'true');
+    }
 
     function cleanTitle() {
       const titleEl = document.querySelector('.part.titlebar .window-title');
@@ -221,36 +389,36 @@ const EDITOR_CUSTOM_SCRIPT = `
       let pill = document.querySelector('#latex-editor-presence-pill');
       if (!latestData.visible) {
         if (pill) pill.remove();
+        closePopover();
         return;
       }
 
       const titlebar = document.querySelector('.part.titlebar');
       if (!titlebar) return;
-      const rightContainer = titlebar.querySelector('.titlebar-right') || titlebar;
 
       if (!pill) {
         pill = document.createElement('div');
         pill.id = 'latex-editor-presence-pill';
+        pill.setAttribute('role', 'button');
+        pill.setAttribute('tabindex', '0');
+        pill.setAttribute('aria-haspopup', 'dialog');
+        pill.setAttribute('aria-expanded', 'false');
         pill.innerHTML = '<span class="presence-dot"></span><span class="presence-text">1 online</span>';
         pill.addEventListener('click', (event) => {
           event.stopPropagation();
-          const rect = pill.getBoundingClientRect();
-          window.latexDesktopBridge?.togglePresence({
-            left: rect.left,
-            right: rect.right,
-            top: rect.top,
-            bottom: rect.bottom
-          });
+          if (document.querySelector('#latex-editor-presence-popover')) closePopover();
+          else openPopover(pill);
+        });
+        pill.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            pill.click();
+          }
         });
       }
 
-      if (!rightContainer.contains(pill)) {
-        const toolbar = rightContainer.querySelector('.action-toolbar-container') || rightContainer.firstChild;
-        if (toolbar) {
-          rightContainer.insertBefore(pill, toolbar);
-        } else {
-          rightContainer.appendChild(pill);
-        }
+      if (!titlebar.contains(pill)) {
+        titlebar.appendChild(pill);
       }
 
       pill.className = latestData.status === 'connecting'
@@ -271,21 +439,38 @@ const EDITOR_CUSTOM_SCRIPT = `
         : 'No other collaborators';
     }
 
+    function scheduleEnsurePill() {
+      if (updateScheduled) return;
+      updateScheduled = true;
+      requestAnimationFrame(() => {
+        updateScheduled = false;
+        ensurePill();
+      });
+    }
+
     window.__latexUpdatePresence = (data) => {
       latestData = data || { visible: false, count: 0, status: 'offline', participants: [] };
       window.__latexLatestPresence = latestData;
-      ensurePill();
+      scheduleEnsurePill();
     };
 
     if (!window.__latexEditorObserver) {
-      window.__latexEditorObserver = new MutationObserver(() => {
-        hide();
-        ensurePill();
-      });
+      // VS Code creates thousands of DOM nodes during startup. Querying the
+      // complete document for every mutation can starve its Extension Host
+      // WebSocket and leave the workbench permanently white. CSS already
+      // hides the account action; this observer only coalesces the small
+      // presence/title update to at most one pass per animation frame.
+      window.__latexEditorObserver = new MutationObserver(scheduleEnsurePill);
       window.__latexEditorObserver.observe(document.documentElement, { childList: true, subtree: true });
+      document.addEventListener('pointerdown', (event) => {
+        if (!event.target.closest?.('#latex-editor-presence-pill, #latex-editor-presence-popover')) closePopover();
+      });
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') closePopover();
+      });
     }
 
-    ensurePill();
+    scheduleEnsurePill();
   })();
 `;
 
@@ -327,6 +512,9 @@ async function loadProject(projectPath) {
     notifyState();
     return null;
   }
+  // Opening a project is also a recovery boundary: native/open-folder dialogs
+  // and renderer modals must never be able to leave the editor detached after
+  // the project has loaded.
   shellOverlayOpen = false;
   activeProject = workspaceManager.openProject(projectPath);
   const target = workspaceManager.codeServerUrl(config.host, serverManager.port, activeProject.path);
@@ -503,7 +691,14 @@ async function startup() {
     const currentUser = authManager?.status().user;
     if (!participants.length && currentUser) {
       return {
-        participants: [{ id: currentUser.id || 'self', name: currentUser.name, role: 'owner', email: currentUser.email, isSelf: true }],
+        participants: [{
+          id: currentUser.id || 'self',
+          name: currentUser.name,
+          role: 'owner',
+          email: currentUser.email,
+          avatarUrl: currentUser.avatar_url || currentUser.avatarUrl || currentUser.picture || null,
+          isSelf: true
+        }],
         currentUserId: currentUser.id || 'self'
       };
     }
