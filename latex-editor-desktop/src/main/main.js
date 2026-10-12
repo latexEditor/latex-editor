@@ -45,12 +45,17 @@ function updateEditorPresence() {
   if (!editorView?.webContents || editorView.webContents.isDestroyed()) return;
   const current = state();
   const collab = current.collaboration || { enabled: false, connection: 'offline', participants: [] };
-  const visible = Boolean(activeProject && collab.enabled);
+  const visible = Boolean(activeProject);
+  const count = collab.enabled && collab.participants?.length ? collab.participants.length : 1;
+  const status = collab.enabled ? (collab.connection || 'online') : 'online';
+  const participants = (collab.enabled && collab.participants?.length)
+    ? collab.participants
+    : (current.auth?.user ? [{ id: current.auth.user.id || 'self', name: current.auth.user.name, role: 'owner' }] : [{ id: 'self', name: 'You', role: 'owner' }]);
   const data = {
     visible,
-    count: collab.participants?.length || 0,
-    status: collab.connection || 'offline',
-    participants: collab.participants || [],
+    count,
+    status,
+    participants,
     error: collab.error || null
   };
   editorView.webContents.executeJavaScript(`
@@ -140,23 +145,25 @@ const EDITOR_CUSTOM_CSS = `
   }
 
   #latex-editor-presence-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    height: 22px;
-    padding: 0 8px;
-    margin-right: 8px;
-    border-radius: 11px;
-    background: rgba(16, 185, 129, 0.08);
-    border: 1px solid rgba(16, 185, 129, 0.25);
-    color: #059669;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    font-size: 11.5px;
-    font-weight: 500;
-    cursor: pointer;
-    user-select: none;
-    transition: all 0.15s ease;
-    flex-shrink: 0;
+    display: inline-flex !important;
+    align-items: center !important;
+    align-self: center !important;
+    gap: 6px !important;
+    height: 22px !important;
+    padding: 0 9px !important;
+    margin-right: 10px !important;
+    border-radius: 11px !important;
+    background: rgba(16, 185, 129, 0.1) !important;
+    border: 1px solid rgba(16, 185, 129, 0.3) !important;
+    color: #059669 !important;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+    font-size: 11.5px !important;
+    font-weight: 500 !important;
+    line-height: 1 !important;
+    cursor: pointer !important;
+    user-select: none !important;
+    transition: all 0.15s ease !important;
+    flex-shrink: 0 !important;
   }
   #latex-editor-presence-pill:hover {
     background: rgba(16, 185, 129, 0.16);
@@ -200,7 +207,7 @@ const EDITOR_CUSTOM_SCRIPT = `
     };
     hide();
 
-    let latestData = window.__latexLatestPresence || { visible: false, count: 0, status: 'offline', participants: [] };
+    let latestData = window.__latexLatestPresence || { visible: true, count: 1, status: 'online', participants: [] };
 
     function cleanTitle() {
       const titleEl = document.querySelector('.part.titlebar .window-title');
@@ -224,7 +231,7 @@ const EDITOR_CUSTOM_SCRIPT = `
       if (!pill) {
         pill = document.createElement('div');
         pill.id = 'latex-editor-presence-pill';
-        pill.innerHTML = '<span class="presence-dot"></span><span class="presence-text"></span>';
+        pill.innerHTML = '<span class="presence-dot"></span><span class="presence-text">1 online</span>';
         pill.addEventListener('click', (event) => {
           event.stopPropagation();
           const rect = pill.getBoundingClientRect();
@@ -235,9 +242,12 @@ const EDITOR_CUSTOM_SCRIPT = `
             bottom: rect.bottom
           });
         });
-        const layoutActions = rightContainer.querySelector('.layout-actions-container') || rightContainer.firstChild;
-        if (layoutActions) {
-          rightContainer.insertBefore(pill, layoutActions);
+      }
+
+      if (!rightContainer.contains(pill)) {
+        const toolbar = rightContainer.querySelector('.action-toolbar-container') || rightContainer.firstChild;
+        if (toolbar) {
+          rightContainer.insertBefore(pill, toolbar);
         } else {
           rightContainer.appendChild(pill);
         }
@@ -466,10 +476,20 @@ async function startup() {
   });
   session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
   await createWindow();
-  presenceWindowManager = new PresenceWindowManager(mainWindow, () => ({
-    participants: collaborationManager?.status().participants || [],
-    currentUserId: authManager?.status().user?.id || null
-  }));
+  presenceWindowManager = new PresenceWindowManager(mainWindow, () => {
+    const participants = collaborationManager?.status().participants || [];
+    const currentUser = authManager?.status().user;
+    if (!participants.length && currentUser) {
+      return {
+        participants: [{ id: currentUser.id || 'self', name: currentUser.name, role: 'owner', email: currentUser.email, isSelf: true }],
+        currentUserId: currentUser.id || 'self'
+      };
+    }
+    return {
+      participants,
+      currentUserId: currentUser?.id || null
+    };
+  });
   await serverReady;
   if (serverStartupError) throw serverStartupError;
   await loadProject(activeProject?.path || null);
