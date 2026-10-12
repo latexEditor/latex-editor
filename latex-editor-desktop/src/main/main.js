@@ -338,9 +338,9 @@ const EDITOR_CUSTOM_CSS = `
     font-size: 11.5px !important;
   }
   @keyframes latex-presence-pulse { 50% { opacity: 0.4; } }
-\`;
+`;
 
-const EDITOR_CUSTOM_SCRIPT = \`
+const EDITOR_CUSTOM_SCRIPT = `
   (() => {
     let latestData = window.__latexLatestPresence || { visible: true, count: 1, status: 'online', participants: [] };
     let updateScheduled = false;
@@ -352,7 +352,7 @@ const EDITOR_CUSTOM_SCRIPT = \`
 
     function initials(name) {
       const trimmed = String(name || 'U').trim();
-      const parts = trimmed.split(/\\\\s+/).filter(Boolean);
+      const parts = trimmed.split(/\\s+/).filter(Boolean);
       if (parts.length >= 2) {
         return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
       }
@@ -401,7 +401,7 @@ const EDITOR_CUSTOM_SCRIPT = \`
       name.className = 'presence-name';
       const displayName = String(person.name || person.email || 'Người dùng');
       name.textContent = person.isSelf
-        ? (displayName === 'Bạn' ? 'Bạn' : \`\${displayName} (Bạn)\`)
+        ? (displayName === 'Bạn' ? 'Bạn' : (displayName + ' (Bạn)'))
         : displayName;
       const role = document.createElement('div');
       role.className = 'presence-role';
@@ -514,11 +514,11 @@ const EDITOR_CUSTOM_SCRIPT = \`
           ? 'Connecting…'
           : latestData.status === 'revoked'
             ? 'Revoked'
-            : \`\${latestData.count} online\`;
+            : (String(latestData.count || 1) + ' online');
       }
 
       pill.title = latestData.participants.length
-        ? latestData.participants.map((p) => \`\${p.name} (\${p.role})\`).join('\\\\n')
+        ? latestData.participants.map((p) => (p.name + ' (' + p.role + ')')).join('\\n')
         : 'No other collaborators';
     }
 
@@ -555,7 +555,7 @@ const EDITOR_CUSTOM_SCRIPT = \`
 
     scheduleEnsurePill();
   })();
-\`;
+`;
 
 async function applyEditorCustomizations() {
   if (!editorView?.webContents || editorView.webContents.isDestroyed()) return;
@@ -566,10 +566,10 @@ async function applyEditorCustomizations() {
   }
   try {
     const data = getEditorPresenceData();
-    await editorView.webContents.executeJavaScript(\`
-      window.__latexLatestPresence = \${JSON.stringify(data)};
-      \${EDITOR_CUSTOM_SCRIPT}
-    \`);
+    await editorView.webContents.executeJavaScript(
+      'window.__latexLatestPresence = ' + JSON.stringify(data) + ';\n' +
+      EDITOR_CUSTOM_SCRIPT
+    );
     updateEditorPresence();
   } catch {
     // Ignore transient script errors
