@@ -263,24 +263,55 @@ button.primary:hover {
   line-height: 1;
 }
 
-/* Presence */
-.presence-wrap {
-  position: relative;
-  display: flex;
+/* Presence in Topbar is hidden because it is placed in the code-server Titlebar */
+.topbar .presence-wrap {
+  display: none !important;
+}
+
+/* Account / Login Button */
+.topbar .account-button {
+  gap: 5px;
+  padding: 0 6px;
+}
+.topbar .account-button.signed-in {
+  padding: 0 3px;
+}
+.account-avatar {
+  display: inline-flex;
   align-items: center;
-}
-.presence-wrap[hidden] {
-  display: none;
-}
-.presence-pulse {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #10b981;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
   flex-shrink: 0;
+  border-radius: 50%;
+  overflow: hidden;
+  user-select: none;
 }
-.topbar .presence-status.connecting .presence-pulse { background: #f59e0b; }
-.topbar .presence-status.error .presence-pulse { background: #ef4444; }
+.account-avatar-icon {
+  width: 14px;
+  height: 14px;
+  stroke: #64748b;
+  display: block;
+}
+.account-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+  display: block;
+}
+.account-avatar-initial {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: #ffffff;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1;
+}
 
 /* Account Badge */
 .account-badge {

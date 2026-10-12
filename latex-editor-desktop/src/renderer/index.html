@@ -28,7 +28,16 @@
     <div id="presence-wrap" class="presence-wrap" hidden>
       <button id="presence-status" class="toolbar-button presence-status" title="Active collaborators" aria-haspopup="true" aria-expanded="false"><span class="presence-pulse"></span><span id="presence-label">0 online</span></button>
     </div>
-    <button id="account-button" class="toolbar-button feature-button" title="Account &amp; Cloud sync" aria-label="Account &amp; Cloud sync"><span id="account-label" class="feature-label">Account</span><span id="account-badge" class="account-badge" hidden>0</span></button>
+    <button id="account-button" class="toolbar-button feature-button account-button" title="Login to sync projects" aria-label="Account &amp; Cloud sync">
+      <span id="account-avatar" class="account-avatar">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="account-avatar-icon">
+          <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path>
+          <circle cx="12" cy="7" r="4"></circle>
+        </svg>
+      </span>
+      <span id="account-label" class="feature-label">Login</span>
+      <span id="account-badge" class="account-badge" hidden>0</span>
+    </button>
 
     <button id="runtime-details" class="runtime-button" title="View LaTeX runtime status">
       <span id="runtime-dot" class="dot checking"></span>

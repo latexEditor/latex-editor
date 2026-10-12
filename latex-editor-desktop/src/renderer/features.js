@@ -129,10 +129,39 @@
   }
 
   function renderAuth(auth) {
-    $('#account-label').textContent = 'Account';
-    $('#account-button').title = auth.signedIn
-      ? `Account (${auth.user.name})`
-      : 'Account & Cloud sync';
+    const avatarEl = $('#account-avatar');
+    const labelEl = $('#account-label');
+    const btn = $('#account-button');
+
+    if (auth.signedIn && auth.user) {
+      btn.title = `${auth.user.name} (${auth.user.email}) · Account & Cloud sync`;
+      labelEl.textContent = '';
+      labelEl.hidden = true;
+      if (avatarEl) {
+        if (auth.user.avatarUrl) {
+          avatarEl.innerHTML = `<img src="${encodeURI(auth.user.avatarUrl)}" class="account-avatar-img" alt="${auth.user.name}">`;
+        } else {
+          const initial = (auth.user.name || 'U').trim()[0].toUpperCase();
+          avatarEl.innerHTML = `<span class="account-avatar-initial">${initial}</span>`;
+        }
+        avatarEl.hidden = false;
+      }
+      btn.classList.add('signed-in');
+    } else {
+      btn.title = auth.configured ? (auth.signingIn ? 'Completing sign in in browser…' : 'Login to sync projects & collaborate') : 'Account & Local projects';
+      labelEl.textContent = auth.signingIn ? 'Signing in…' : 'Login';
+      labelEl.hidden = false;
+      if (avatarEl) {
+        avatarEl.innerHTML = `
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="account-avatar-icon">
+            <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path>
+            <circle cx="12" cy="7" r="4"></circle>
+          </svg>
+        `;
+        avatarEl.hidden = false;
+      }
+      btn.classList.remove('signed-in');
+    }
     $('#account-description').textContent = auth.signedIn
       ? `${auth.user.name} · ${auth.user.email}`
       : auth.configured ? (auth.signingIn ? 'Hoàn tất đăng nhập trong trình duyệt vừa mở.' : 'Đăng nhập để đồng bộ project và lịch sử giữa các máy.')

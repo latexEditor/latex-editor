@@ -41,8 +41,26 @@ function state() {
   };
 }
 
+function updateEditorPresence() {
+  if (!editorView?.webContents || editorView.webContents.isDestroyed()) return;
+  const current = state();
+  const collab = current.collaboration || { enabled: false, connection: 'offline', participants: [] };
+  const visible = Boolean(activeProject && collab.enabled);
+  const data = {
+    visible,
+    count: collab.participants?.length || 0,
+    status: collab.connection || 'offline',
+    participants: collab.participants || [],
+    error: collab.error || null
+  };
+  editorView.webContents.executeJavaScript(`
+    window.__latexUpdatePresence?.(${JSON.stringify(data)});
+  `).catch(() => {});
+}
+
 function notifyState() {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('latex:state-changed', state());
+  updateEditorPresence();
 }
 
 function layoutEditor() {
@@ -89,7 +107,7 @@ function allowedEditorUrl(target) {
   }
 }
 
-const HIDE_ACCOUNTS_CSS = `
+const EDITOR_CUSTOM_CSS = `
   .activitybar .action-item:has(.codicon-account),
   .activitybar .action-item:has([class*="codicon-account"]),
   .activitybar .action-item:has([aria-label*="Account" i]),
@@ -114,9 +132,65 @@ const HIDE_ACCOUNTS_CSS = `
   [class*="codicon-account"] {
     display: none !important;
   }
+
+  .part.titlebar .window-title {
+    font-size: 11.5px !important;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+    opacity: 0.85 !important;
+  }
+
+  #latex-editor-presence-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 22px;
+    padding: 0 8px;
+    margin-right: 8px;
+    border-radius: 11px;
+    background: rgba(16, 185, 129, 0.08);
+    border: 1px solid rgba(16, 185, 129, 0.25);
+    color: #059669;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 11.5px;
+    font-weight: 500;
+    cursor: pointer;
+    user-select: none;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+  }
+  #latex-editor-presence-pill:hover {
+    background: rgba(16, 185, 129, 0.16);
+    border-color: rgba(16, 185, 129, 0.45);
+    color: #047857;
+  }
+  #latex-editor-presence-pill.connecting {
+    background: rgba(245, 158, 11, 0.08);
+    border-color: rgba(245, 158, 11, 0.25);
+    color: #d97706;
+  }
+  #latex-editor-presence-pill.error {
+    background: rgba(239, 68, 68, 0.08);
+    border-color: rgba(239, 68, 68, 0.25);
+    color: #dc2626;
+  }
+  #latex-editor-presence-pill .presence-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #10b981;
+    flex-shrink: 0;
+  }
+  #latex-editor-presence-pill.connecting .presence-dot {
+    background: #f59e0b;
+    animation: latex-presence-pulse 1.5s infinite;
+  }
+  #latex-editor-presence-pill.error .presence-dot {
+    background: #ef4444;
+  }
+  @keyframes latex-presence-pulse { 50% { opacity: 0.4; } }
 `;
 
-const HIDE_ACCOUNTS_SCRIPT = `
+const EDITOR_CUSTOM_SCRIPT = `
   (() => {
     const hide = () => {
       document.querySelectorAll('.codicon-account, [class*="codicon-account"]').forEach((el) => {
@@ -125,22 +199,96 @@ const HIDE_ACCOUNTS_SCRIPT = `
       });
     };
     hide();
-    if (!window.__latexHideAccountsObserver) {
-      window.__latexHideAccountsObserver = new MutationObserver(hide);
-      window.__latexHideAccountsObserver.observe(document.documentElement, { childList: true, subtree: true });
+
+    let latestData = window.__latexLatestPresence || { visible: false, count: 0, status: 'offline', participants: [] };
+
+    function cleanTitle() {
+      const titleEl = document.querySelector('.part.titlebar .window-title');
+      if (titleEl && titleEl.textContent && titleEl.textContent.includes(' - code-server')) {
+        titleEl.textContent = titleEl.textContent.replace(' - code-server', '');
+      }
     }
+
+    function ensurePill() {
+      cleanTitle();
+      let pill = document.querySelector('#latex-editor-presence-pill');
+      if (!latestData.visible) {
+        if (pill) pill.remove();
+        return;
+      }
+
+      const titlebar = document.querySelector('.part.titlebar');
+      if (!titlebar) return;
+      const rightContainer = titlebar.querySelector('.titlebar-right') || titlebar;
+
+      if (!pill) {
+        pill = document.createElement('div');
+        pill.id = 'latex-editor-presence-pill';
+        pill.innerHTML = '<span class="presence-dot"></span><span class="presence-text"></span>';
+        pill.addEventListener('click', (event) => {
+          event.stopPropagation();
+          const rect = pill.getBoundingClientRect();
+          window.latexDesktopBridge?.togglePresence({
+            left: rect.left,
+            right: rect.right,
+            top: rect.top,
+            bottom: rect.bottom
+          });
+        });
+        const layoutActions = rightContainer.querySelector('.layout-actions-container') || rightContainer.firstChild;
+        if (layoutActions) {
+          rightContainer.insertBefore(pill, layoutActions);
+        } else {
+          rightContainer.appendChild(pill);
+        }
+      }
+
+      pill.className = latestData.status === 'connecting'
+        ? 'connecting'
+        : (latestData.status === 'error' || latestData.status === 'revoked' ? 'error' : '');
+      
+      const textEl = pill.querySelector('.presence-text');
+      if (textEl) {
+        textEl.textContent = latestData.status === 'connecting'
+          ? 'Connecting…'
+          : latestData.status === 'revoked'
+            ? 'Revoked'
+            : \`\${latestData.count} online\`;
+      }
+
+      pill.title = latestData.participants.length
+        ? latestData.participants.map((p) => \`\${p.name} (\${p.role})\`).join('\\n')
+        : 'No other collaborators';
+    }
+
+    window.__latexUpdatePresence = (data) => {
+      latestData = data || { visible: false, count: 0, status: 'offline', participants: [] };
+      window.__latexLatestPresence = latestData;
+      ensurePill();
+    };
+
+    if (!window.__latexEditorObserver) {
+      window.__latexEditorObserver = new MutationObserver(() => {
+        hide();
+        ensurePill();
+      });
+      window.__latexEditorObserver.observe(document.documentElement, { childList: true, subtree: true });
+    }
+
+    ensurePill();
   })();
 `;
 
 async function applyEditorCustomizations() {
   if (!editorView?.webContents || editorView.webContents.isDestroyed()) return;
   try {
-    await editorView.webContents.insertCSS(HIDE_ACCOUNTS_CSS);
+    await editorView.webContents.insertCSS(EDITOR_CUSTOM_CSS);
   } catch {
     // Ignore transient navigation errors
   }
   try {
-    await editorView.webContents.executeJavaScript(HIDE_ACCOUNTS_SCRIPT);
+    await editorView.webContents.executeJavaScript(EDITOR_CUSTOM_SCRIPT);
+    updateEditorPresence();
   } catch {
     // Ignore transient script errors
   }
@@ -210,8 +358,23 @@ async function createWindow() {
   mainWindow.on('resize', layoutEditor);
   mainWindow.on('closed', () => { mainWindow = null; });
 
+  ipcMain.on('latex:editor-toggle-presence', (_event, rect) => {
+    if (!rect) return;
+    const anchor = {
+      left: rect.left,
+      right: rect.right,
+      bottom: rect.bottom + TOPBAR_HEIGHT
+    };
+    presenceWindowManager?.toggle(anchor);
+  });
+
   editorView = new WebContentsView({
-    webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true }
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: true,
+      preload: path.join(__dirname, '../preload/editor-preload.js')
+    }
   });
   mainWindow.contentView.addChildView(editorView);
   layoutEditor();
