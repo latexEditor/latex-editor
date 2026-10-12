@@ -41,45 +41,57 @@ function state() {
   };
 }
 
+function getEditorPresenceData() {
+  const current = state();
+  const collab = current.collaboration || { enabled: false, connection: 'offline', participants: [] };
+  const visible = Boolean(activeProject);
+  const currentUser = current.auth?.user;
+  const selfAvatar = currentUser?.avatar_url || currentUser?.avatarUrl || currentUser?.picture || null;
+  const selfName = currentUser?.name || currentUser?.email || 'Bạn';
+  const selfParticipant = {
+    id: currentUser?.id || 'self',
+    name: selfName,
+    role: 'owner',
+    email: currentUser?.email || '',
+    avatarUrl: selfAvatar,
+    isSelf: true
+  };
+  const rawParticipants = (collab.enabled && Array.isArray(collab.participants) && collab.participants.length)
+    ? collab.participants
+    : [];
+  const participants = rawParticipants.length
+    ? rawParticipants.map((p) => {
+        const isSelf = p.id === currentUser?.id || p.isSelf;
+        return {
+          ...p,
+          name: isSelf ? selfName : (p.name || 'Thành viên'),
+          avatarUrl: p.avatarUrl || p.avatar_url || (isSelf ? selfAvatar : null),
+          isSelf
+        };
+      })
+    : [selfParticipant];
+  const count = participants.length;
+  const status = collab.connection || 'online';
+  return {
+    visible,
+    count,
+    status,
+    participants,
+    error: collab.error || null,
+    currentUser: selfParticipant
+  };
+}
+
 function updateEditorPresence() {
   try {
     if (!editorView?.webContents || editorView.webContents.isDestroyed()) return;
-    const current = state();
-    const collab = current.collaboration || { enabled: false, connection: 'offline', participants: [] };
-    const visible = Boolean(activeProject);
-    const count = collab.enabled && collab.participants?.length ? collab.participants.length : 1;
-    const currentUser = current.auth?.user;
-    const selfAvatar = currentUser?.avatar_url || currentUser?.avatarUrl || currentUser?.picture || null;
-    const selfParticipant = currentUser
-      ? [{
-          id: currentUser.id || 'self',
-          name: currentUser.name,
-          role: 'owner',
-          email: currentUser.email,
-          avatarUrl: selfAvatar,
-          isSelf: true
-        }]
-      : [{ id: 'self', name: 'You', role: 'owner', avatarUrl: null, isSelf: true }];
-    const participants = (collab.enabled && collab.participants?.length)
-      ? collab.participants.map((p) => {
-          const isSelf = p.id === currentUser?.id || p.isSelf;
-          return {
-            ...p,
-            avatarUrl: p.avatarUrl || p.avatar_url || (isSelf ? selfAvatar : null),
-            isSelf
-          };
-        })
-      : selfParticipant;
-    const status = collab.connection || 'offline';
-    const data = {
-      visible,
-      count,
-      status,
-      participants,
-      error: collab.error || null
-    };
+    const data = getEditorPresenceData();
     editorView.webContents.executeJavaScript(`
-      window.__latexUpdatePresence?.(${JSON.stringify(data)});
+      if (typeof window.__latexUpdatePresence === 'function') {
+        window.__latexUpdatePresence(${JSON.stringify(data)});
+      } else {
+        window.__latexLatestPresence = ${JSON.stringify(data)};
+      }
     `).catch(() => {});
   } catch (error) {
     console.warn('Failed to update editor presence:', error);
@@ -270,13 +282,18 @@ const EDITOR_CUSTOM_CSS = `
     gap: 10px !important;
     padding: 10px 2px 4px !important;
   }
+  #latex-editor-presence-popover .presence-avatar-wrap {
+    position: relative !important;
+    width: 36px !important;
+    height: 36px !important;
+    flex: 0 0 36px !important;
+  }
   #latex-editor-presence-popover .presence-avatar {
     position: relative !important;
     display: grid !important;
     place-items: center !important;
     width: 36px !important;
     height: 36px !important;
-    flex: 0 0 36px !important;
     overflow: hidden !important;
     border-radius: 50% !important;
     background: #e0e7ff !important;
@@ -291,17 +308,18 @@ const EDITOR_CUSTOM_CSS = `
     height: 100% !important;
     border-radius: 50% !important;
     object-fit: cover !important;
+    display: block !important;
   }
-  #latex-editor-presence-popover .presence-avatar::after {
-    content: '' !important;
+  #latex-editor-presence-popover .presence-online-dot {
     position: absolute !important;
-    right: 0 !important;
-    bottom: 0 !important;
-    width: 8px !important;
-    height: 8px !important;
+    right: -1px !important;
+    bottom: -1px !important;
+    width: 9px !important;
+    height: 9px !important;
     border: 2px solid #fff !important;
     border-radius: 50% !important;
     background: #10b981 !important;
+    pointer-events: none !important;
   }
   #latex-editor-presence-popover .presence-details {
     min-width: 0 !important;
@@ -320,9 +338,9 @@ const EDITOR_CUSTOM_CSS = `
     font-size: 11.5px !important;
   }
   @keyframes latex-presence-pulse { 50% { opacity: 0.4; } }
-`;
+\`;
 
-const EDITOR_CUSTOM_SCRIPT = `
+const EDITOR_CUSTOM_SCRIPT = \`
   (() => {
     let latestData = window.__latexLatestPresence || { visible: true, count: 1, status: 'online', participants: [] };
     let updateScheduled = false;
@@ -333,7 +351,65 @@ const EDITOR_CUSTOM_SCRIPT = `
     }
 
     function initials(name) {
-      return String(name || 'U').trim().split(/\\s+/).slice(-2).map((part) => part[0] || '').join('').toUpperCase();
+      const trimmed = String(name || 'U').trim();
+      const parts = trimmed.split(/\\\\s+/).filter(Boolean);
+      if (parts.length >= 2) {
+        return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+      }
+      return trimmed.slice(0, 2).toUpperCase() || 'U';
+    }
+
+    function renderPersonRow(person) {
+      const row = document.createElement('div');
+      row.className = 'presence-person';
+
+      const avatarWrap = document.createElement('div');
+      avatarWrap.className = 'presence-avatar-wrap';
+
+      const avatar = document.createElement('div');
+      avatar.className = 'presence-avatar';
+
+      const initialsSpan = document.createElement('span');
+      initialsSpan.className = 'presence-initials';
+      initialsSpan.textContent = initials(person.name);
+      avatar.appendChild(initialsSpan);
+
+      const imageUrl = person.avatarUrl || person.avatar_url || person.avatar || person.picture;
+      if (imageUrl) {
+        const image = document.createElement('img');
+        image.alt = '';
+        image.referrerPolicy = 'no-referrer';
+        image.src = imageUrl;
+        image.addEventListener('load', () => {
+          initialsSpan.style.display = 'none';
+          avatar.style.background = 'transparent';
+        }, { once: true });
+        image.addEventListener('error', () => {
+          image.remove();
+          initialsSpan.style.display = '';
+        }, { once: true });
+        avatar.appendChild(image);
+      }
+
+      const dot = document.createElement('span');
+      dot.className = 'presence-online-dot';
+      avatarWrap.append(avatar, dot);
+
+      const details = document.createElement('div');
+      details.className = 'presence-details';
+      const name = document.createElement('div');
+      name.className = 'presence-name';
+      const displayName = String(person.name || person.email || 'Người dùng');
+      name.textContent = person.isSelf
+        ? (displayName === 'Bạn' ? 'Bạn' : \`\${displayName} (Bạn)\`)
+        : displayName;
+      const role = document.createElement('div');
+      role.className = 'presence-role';
+      role.textContent = person.role === 'owner' ? 'Chủ sở hữu' : (person.role === 'editor' ? 'Có thể chỉnh sửa' : 'Người xem');
+      details.append(name, role);
+
+      row.append(avatarWrap, details);
+      return row;
     }
 
     function openPopover(pill) {
@@ -343,45 +419,24 @@ const EDITOR_CUSTOM_SCRIPT = `
       popover.setAttribute('role', 'dialog');
       popover.setAttribute('aria-label', 'Danh sách người đang online');
 
+      const data = window.__latexLatestPresence || latestData || {};
       const heading = document.createElement('div');
       heading.className = 'presence-heading';
       const headingText = document.createElement('span');
       headingText.textContent = 'Đang online';
       const total = document.createElement('span');
       total.className = 'presence-total';
-      total.textContent = String(latestData.count || 1) + ' người';
+      total.textContent = String(data.count || 1) + ' người';
       heading.append(headingText, total);
       popover.appendChild(heading);
 
-      const people = Array.isArray(latestData.participants) && latestData.participants.length
-        ? latestData.participants
-        : [{ name: 'Bạn', role: 'owner', isSelf: true }];
+      const fallbackUser = data.currentUser || { name: 'Bạn', role: 'owner', isSelf: true, avatarUrl: null };
+      const people = Array.isArray(data.participants) && data.participants.length
+        ? data.participants
+        : [fallbackUser];
+
       people.forEach((person) => {
-        const row = document.createElement('div');
-        row.className = 'presence-person';
-        const avatar = document.createElement('div');
-        avatar.className = 'presence-avatar';
-        avatar.textContent = initials(person.name);
-        const imageUrl = person.avatarUrl || person.avatar_url || person.avatar || person.picture;
-        if (imageUrl) {
-          const image = document.createElement('img');
-          image.alt = '';
-          image.referrerPolicy = 'no-referrer';
-          image.src = imageUrl;
-          image.addEventListener('error', () => image.remove(), { once: true });
-          avatar.appendChild(image);
-        }
-        const details = document.createElement('div');
-        details.className = 'presence-details';
-        const name = document.createElement('div');
-        name.className = 'presence-name';
-        name.textContent = String(person.name || person.email || 'Người dùng') + (person.isSelf ? ' (Bạn)' : '');
-        const role = document.createElement('div');
-        role.className = 'presence-role';
-        role.textContent = person.role === 'owner' ? 'Chủ sở hữu' : (person.role === 'editor' ? 'Có thể chỉnh sửa' : 'Người xem');
-        details.append(name, role);
-        row.append(avatar, details);
-        popover.appendChild(row);
+        popover.appendChild(renderPersonRow(person));
       });
 
       document.body.appendChild(popover);
@@ -420,10 +475,22 @@ const EDITOR_CUSTOM_SCRIPT = `
         pill.setAttribute('aria-haspopup', 'dialog');
         pill.setAttribute('aria-expanded', 'false');
         pill.innerHTML = '<span class="presence-dot"></span><span class="presence-text">1 online</span>';
-        pill.addEventListener('click', (event) => {
+        pill.addEventListener('click', async (event) => {
           event.stopPropagation();
-          if (document.querySelector('#latex-editor-presence-popover')) closePopover();
-          else openPopover(pill);
+          if (document.querySelector('#latex-editor-presence-popover')) {
+            closePopover();
+            return;
+          }
+          if (window.latexDesktopBridge?.getPresence) {
+            try {
+              const freshData = await window.latexDesktopBridge.getPresence();
+              if (freshData) {
+                latestData = freshData;
+                window.__latexLatestPresence = freshData;
+              }
+            } catch {}
+          }
+          openPopover(pill);
         });
         pill.addEventListener('keydown', (event) => {
           if (event.key === 'Enter' || event.key === ' ') {
@@ -451,7 +518,7 @@ const EDITOR_CUSTOM_SCRIPT = `
       }
 
       pill.title = latestData.participants.length
-        ? latestData.participants.map((p) => \`\${p.name} (\${p.role})\`).join('\\n')
+        ? latestData.participants.map((p) => \`\${p.name} (\${p.role})\`).join('\\\\n')
         : 'No other collaborators';
     }
 
@@ -488,7 +555,7 @@ const EDITOR_CUSTOM_SCRIPT = `
 
     scheduleEnsurePill();
   })();
-`;
+\`;
 
 async function applyEditorCustomizations() {
   if (!editorView?.webContents || editorView.webContents.isDestroyed()) return;
@@ -498,7 +565,11 @@ async function applyEditorCustomizations() {
     // Ignore transient navigation errors
   }
   try {
-    await editorView.webContents.executeJavaScript(EDITOR_CUSTOM_SCRIPT);
+    const data = getEditorPresenceData();
+    await editorView.webContents.executeJavaScript(\`
+      window.__latexLatestPresence = \${JSON.stringify(data)};
+      \${EDITOR_CUSTOM_SCRIPT}
+    \`);
     updateEditorPresence();
   } catch {
     // Ignore transient script errors
@@ -603,6 +674,9 @@ async function createWindow() {
     };
     presenceWindowManager?.toggle(anchor);
   });
+
+  ipcMain.removeHandler('latex:get-presence');
+  ipcMain.handle('latex:get-presence', () => getEditorPresenceData());
 
   editorView = new WebContentsView({
     webPreferences: {
@@ -741,6 +815,7 @@ async function startup() {
 async function shutdown() {
   if (quitting) return;
   quitting = true;
+  ipcMain.removeHandler('latex:get-presence');
   authManager?.dispose();
   collaborationManager?.dispose();
   presenceWindowManager?.dispose();
