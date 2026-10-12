@@ -139,10 +139,14 @@
       labelEl.hidden = true;
       if (avatarEl) {
         const userAvatar = auth.user.avatarUrl || auth.user.avatar_url || auth.user.picture;
+        const initial = (auth.user.name || 'U').trim()[0].toUpperCase();
         if (userAvatar) {
           avatarEl.innerHTML = `<img src="${encodeURI(userAvatar)}" class="account-avatar-img" alt="${auth.user.name}" referrerpolicy="no-referrer">`;
+          const img = avatarEl.querySelector('img');
+          img?.addEventListener('error', () => {
+            avatarEl.innerHTML = `<span class="account-avatar-initial">${initial}</span>`;
+          });
         } else {
-          const initial = (auth.user.name || 'U').trim()[0].toUpperCase();
           avatarEl.innerHTML = `<span class="account-avatar-initial">${initial}</span>`;
         }
         avatarEl.hidden = false;
@@ -163,8 +167,35 @@
       }
       btn.classList.remove('signed-in');
     }
+
+    const profileCard = $('#account-profile-card');
+    if (profileCard) {
+      if (auth.signedIn && auth.user) {
+        profileCard.hidden = false;
+        $('#account-profile-name').textContent = auth.user.name || 'Người dùng';
+        $('#account-profile-email').textContent = auth.user.email || '';
+        const dialogAvatar = $('#account-dialog-avatar');
+        if (dialogAvatar) {
+          const userAvatar = auth.user.avatarUrl || auth.user.avatar_url || auth.user.picture;
+          const initial = (auth.user.name || 'U').trim()[0].toUpperCase();
+          if (userAvatar) {
+            dialogAvatar.innerHTML = `<img src="${encodeURI(userAvatar)}" class="account-avatar-img" alt="${auth.user.name}" referrerpolicy="no-referrer">`;
+            const img = dialogAvatar.querySelector('img');
+            img?.addEventListener('error', () => {
+              dialogAvatar.innerHTML = `<span class="account-avatar-initial">${initial}</span>`;
+            });
+          } else {
+            dialogAvatar.innerHTML = `<span class="account-avatar-initial">${initial}</span>`;
+          }
+        }
+      } else {
+        profileCard.hidden = true;
+      }
+    }
+
+    $('#account-description').hidden = auth.signedIn;
     $('#account-description').textContent = auth.signedIn
-      ? `${auth.user.name} · ${auth.user.email}`
+      ? ''
       : auth.configured ? (auth.signingIn ? 'Hoàn tất đăng nhập trong trình duyệt vừa mở.' : 'Đăng nhập để đồng bộ project và lịch sử giữa các máy.')
         : 'Cloud chưa được thiết lập cho bản ứng dụng này. Bạn vẫn có thể dùng project và lịch sử local.';
     $('#google-login').hidden = auth.signedIn;

@@ -274,18 +274,19 @@ button.primary:hover {
   padding: 0 6px;
 }
 .topbar .account-button.signed-in {
-  padding: 0 3px;
+  padding: 0 4px;
 }
 .account-avatar {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   flex-shrink: 0;
   border-radius: 50%;
   overflow: hidden;
   user-select: none;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08);
 }
 .account-avatar-icon {
   width: 14px;
@@ -626,4 +627,62 @@ dialog .feature-note { font-size: 12px; margin-bottom: 14px; }
 .template-option-actions button {
   padding: 3px 8px; font-size: 11px;
 }
+
+/* Account Profile Card in Modal */
+.account-profile-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  margin: 10px 0 14px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+.account-dialog-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  background: #f1f5f9;
+}
+.account-dialog-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.account-dialog-avatar .account-avatar-initial {
+  width: 100%;
+  height: 100%;
+  font-size: 16px;
+  font-weight: 700;
+}
+.account-profile-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.account-profile-info strong {
+  font-size: 13.5px;
+  color: #1e293b;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.account-profile-info small {
+  font-size: 12px;
+  color: #64748b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 

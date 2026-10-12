@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https:;">
   <title>LaTeX Editor</title>
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -143,6 +143,13 @@
 
   <dialog id="account-dialog" aria-labelledby="account-title">
     <h2 id="account-title">Tài khoản &amp; Cloud</h2>
+    <div id="account-profile-card" class="account-profile-card" hidden>
+      <div id="account-dialog-avatar" class="account-dialog-avatar"></div>
+      <div class="account-profile-info">
+        <strong id="account-profile-name"></strong>
+        <small id="account-profile-email"></small>
+      </div>
+    </div>
     <p id="account-description">Bạn đang dùng chế độ local.</p>
     <div class="account-actions">
       <button id="google-login" type="button" class="primary">Đăng nhập bằng Google</button>

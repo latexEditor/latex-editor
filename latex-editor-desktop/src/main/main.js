@@ -49,18 +49,26 @@ function updateEditorPresence() {
     const visible = Boolean(activeProject);
     const count = collab.enabled && collab.participants?.length ? collab.participants.length : 1;
     const currentUser = current.auth?.user;
+    const selfAvatar = currentUser?.avatar_url || currentUser?.avatarUrl || currentUser?.picture || null;
     const selfParticipant = currentUser
       ? [{
           id: currentUser.id || 'self',
           name: currentUser.name,
           role: 'owner',
           email: currentUser.email,
-          avatarUrl: currentUser.avatar_url || currentUser.avatarUrl || currentUser.picture || null,
+          avatarUrl: selfAvatar,
           isSelf: true
         }]
       : [{ id: 'self', name: 'You', role: 'owner', avatarUrl: null, isSelf: true }];
     const participants = (collab.enabled && collab.participants?.length)
-      ? collab.participants
+      ? collab.participants.map((p) => {
+          const isSelf = p.id === currentUser?.id || p.isSelf;
+          return {
+            ...p,
+            avatarUrl: p.avatarUrl || p.avatar_url || (isSelf ? selfAvatar : null),
+            isSelf
+          };
+        })
       : selfParticipant;
     const status = collab.connection || 'offline';
     const data = {
@@ -277,8 +285,11 @@ const EDITOR_CUSTOM_CSS = `
     font-weight: 700 !important;
   }
   #latex-editor-presence-popover .presence-avatar img {
+    position: absolute !important;
+    inset: 0 !important;
     width: 100% !important;
     height: 100% !important;
+    border-radius: 50% !important;
     object-fit: cover !important;
   }
   #latex-editor-presence-popover .presence-avatar::after {
@@ -692,8 +703,17 @@ async function startup() {
   session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
   await createWindow();
   presenceWindowManager = new PresenceWindowManager(mainWindow, () => {
-    const participants = collaborationManager?.status().participants || [];
+    const rawParticipants = collaborationManager?.status().participants || [];
     const currentUser = authManager?.status().user;
+    const selfAvatar = currentUser?.avatar_url || currentUser?.avatarUrl || currentUser?.picture || null;
+    const participants = rawParticipants.map((p) => {
+      const isSelf = p.id === currentUser?.id || p.isSelf;
+      return {
+        ...p,
+        avatarUrl: p.avatarUrl || p.avatar_url || (isSelf ? selfAvatar : null),
+        isSelf
+      };
+    });
     if (!participants.length && currentUser) {
       return {
         participants: [{
@@ -701,7 +721,7 @@ async function startup() {
           name: currentUser.name,
           role: 'owner',
           email: currentUser.email,
-          avatarUrl: currentUser.avatar_url || currentUser.avatarUrl || currentUser.picture || null,
+          avatarUrl: selfAvatar,
           isSelf: true
         }],
         currentUserId: currentUser.id || 'self'
