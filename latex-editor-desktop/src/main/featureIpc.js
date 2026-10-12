@@ -58,11 +58,11 @@ function registerFeatureIpc({ ipcMain, dialog, workspace, history, auth, cloud, 
     },
     'latex:cloud-list': () => cloud.list(),
     'latex:cloud-upload': (_event, value) => cloud.upload(project(value)),
-    'latex:cloud-download': async (_event, id) => {
-      const downloaded = await cloud.download(id);
-      await openProject(downloaded.path);
-      return downloaded;
-    },
+    // Downloading and opening are deliberately separate operations. The
+    // renderer may still have a modal dialog open while this IPC call runs;
+    // attaching the native WebContentsView at that point can cover the modal
+    // and leave the shell looking like a frozen white window.
+    'latex:cloud-download': (_event, id) => cloud.download(id),
     'latex:cloud-get-meta': (_event, value) => cloud.getProjectMeta(project(value)),
     'latex:cloud-list-members': (_event, value) => cloud.listMembers(project(value)),
     'latex:cloud-invite': (_event, value, options) => cloud.invite(project(value), options),

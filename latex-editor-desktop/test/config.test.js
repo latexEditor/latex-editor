@@ -22,3 +22,10 @@ test('uses the deployed cloud Worker by default so Google login is available', (
 test('allows development builds to override the cloud Worker URL', () => {
   assert.equal(loadConfig('http://127.0.0.1:8787').apiUrl, 'http://127.0.0.1:8787');
 });
+
+test('starts bundled code-server through its Node process so shutdown can terminate the whole tree', () => {
+  const config = loadConfig();
+  assert.match(config.executable, /runtime[\\/]node20[\\/]node\.exe$/i);
+  assert.equal(config.executableArgs.length, 1);
+  assert.match(config.executableArgs[0], /code-server[\\/]out[\\/]node[\\/]entry\.js$/i);
+});

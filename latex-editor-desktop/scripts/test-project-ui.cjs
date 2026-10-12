@@ -27,6 +27,8 @@ let presenceManager;
 let activeProject = null;
 let overlayOpen = false;
 let choosingCount = 0;
+let openProjectCount = 0;
+const openProjectOverlayStates = [];
 const revealed = [];
 const errors = [];
 const history = new HistoryManager({ historyDir: path.join(root, 'history') });
@@ -48,7 +50,12 @@ registerIpc({
   auth: { status: () => ({ signedIn: true }) },
   cloud: { upload: async () => ({ status: 'synced', project: { id: 'ui-test-cloud-project' } }) },
   runtimeManager: { getStatus: () => ({ canBuild: true, distribution: 'Test runtime', tools: [] }) },
-  openProject: async (location) => { activeProject = location ? manager.openProject(location) : null; notify(); },
+  openProject: async (location) => {
+    openProjectCount += 1;
+    openProjectOverlayStates.push(overlayOpen);
+    activeProject = location ? manager.openProject(location) : null;
+    notify();
+  },
   closeProject: async (location) => { activeProject = manager.closeProject(location); notify(); },
   hideEditor: () => { overlayOpen = true; },
   showEditor: () => { overlayOpen = false; },
@@ -278,6 +285,7 @@ async function run() {
 
   await click('.cloud-project button');
   await waitForPage(() => document.querySelector('#account-feedback').textContent.includes('Đã tải'), 'download cloud project');
+  assert.equal(openProjectOverlayStates.at(-1), false, 'cloud copy must open only after the account modal releases the editor');
   const cloudCopy = activeProject;
   assert.notEqual(cloudCopy.path, report.path);
   assert.equal((await history.list(cloudCopy.path)).length, 4);
@@ -320,6 +328,7 @@ async function run() {
   await click('#recent-project-list .recent-project-open');
   await waitForPage(() => !document.querySelector('#recent-dialog').open && document.querySelectorAll('.project-tab').length === 1, 'reopen project');
   assert.equal(activeProject.path, report.path);
+  assert.equal(openProjectOverlayStates.at(-1), false, 'recent project must open only after its modal releases the editor');
 
   await click('#recent-projects');
   await waitForPage(() => document.querySelector('#recent-dialog').open, 'repeated recent dialog');
@@ -370,6 +379,11 @@ async function run() {
   window.setSize(960, 640);
   // Windows display scaling can round the offscreen viewport by one CSS pixel.
   await waitForPage(() => Math.abs(window.innerWidth - 960) <= 2 && document.querySelectorAll('.project-tab').length === 7, 'compact toolbar');
+  const openCountBeforeTabClick = openProjectCount;
+  await click('.project-tab:nth-child(2) .project-tab-open');
+  await waitFor(() => activeProject?.name === 'Project 1 with a longer name', 'switch project from topbar tab');
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal(openProjectCount, openCountBeforeTabClick + 1, 'one tab click must open a project exactly once');
   await click('#new-project');
   await waitForPage(() => document.querySelector('#new-dialog').open && document.querySelectorAll('.template-option').length === 8, 'compact template library');
   assert.equal(await evaluate(() => {

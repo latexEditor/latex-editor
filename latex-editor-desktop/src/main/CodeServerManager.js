@@ -45,6 +45,7 @@ class CodeServerManager {
     this.#writeGlobalSettings();
 
     const args = [
+      ...(this.config.executableArgs || []),
       '--bind-addr', `${this.config.host}:${this.port}`,
       '--auth', this.config.auth,
       '--disable-workspace-trust',

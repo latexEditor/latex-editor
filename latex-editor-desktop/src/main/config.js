@@ -25,7 +25,10 @@ module.exports = {
   host: process.env.CODE_SERVER_HOST || '127.0.0.1',
   preferredPort: Number(process.env.CODE_SERVER_PORT || 8765),
   readyTimeoutMs: Number(process.env.CODE_SERVER_READY_TIMEOUT_MS || 60_000),
-  executable: process.env.CODE_SERVER_BIN || path.join(baseDir, 'runtime', 'code-server-node20.cmd'),
+  executable: process.env.CODE_SERVER_BIN || path.join(baseDir, 'runtime', 'node20', 'node.exe'),
+  executableArgs: process.env.CODE_SERVER_BIN
+    ? []
+    : [path.join(baseDir, 'runtime', 'npm-global', 'node_modules', 'code-server', 'out', 'node', 'entry.js')],
   auth: 'none',
   appDataDir: path.join(appDataRoot, 'code-server-data'),
   extensionsDir: path.join(appDataRoot, 'extensions'),

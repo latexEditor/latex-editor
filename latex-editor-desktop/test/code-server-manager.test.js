@@ -88,3 +88,21 @@ test('registers the bundled collaboration extension and passes only the local br
   child.exitCode = 0;
   child.emit('exit', 0, null);
 });
+
+test('launches the bundled code-server entry through the tracked Node process', async (t) => {
+  const child = fakeChild();
+  let spawned;
+  const values = config(t, { executableArgs: ['C:\\runtime\\code-server\\entry.js'] });
+  const manager = new CodeServerManager(values, quiet, {
+    spawn: (command, args) => { spawned = { command, args }; return child; },
+    fetch: async () => new Response('', { status: 200 })
+  });
+
+  await manager.start();
+
+  assert.equal(spawned.command, process.execPath);
+  assert.equal(spawned.args[0], 'C:\\runtime\\code-server\\entry.js');
+  assert.equal(spawned.args.includes('--bind-addr'), true);
+  child.exitCode = 0;
+  child.emit('exit', 0, null);
+});

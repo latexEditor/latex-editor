@@ -92,8 +92,9 @@ function renderProjectList(container, projects, errorSelector) {
       open.disabled = true;
       document.querySelector(errorSelector).textContent = '';
       try {
-        await api.openProject(project.path);
         if (recentDialog.open) recentDialog.close();
+        await api.showEditor();
+        await api.openProject(project.path);
       } catch (error) {
         document.querySelector(errorSelector).textContent = error.message;
       } finally {
@@ -303,7 +304,10 @@ function renderProjectTabs(projects, activeProject) {
       }
     };
 
-    openButton.addEventListener('click', handleOpen);
+    openButton.addEventListener('click', (event) => {
+      event.stopPropagation();
+      handleOpen();
+    });
     tab.addEventListener('click', (event) => {
       if (event.target.closest('.project-tab-close')) return;
       handleOpen();
