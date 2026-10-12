@@ -216,9 +216,25 @@ function cursorDecorations(user) {
   let decorations = remoteCursors.get(user.id)?.decorations;
   if (decorations) return decorations;
   const color = cursorColor(user.id);
+  const name = (user.name || 'Thành viên').trim();
   decorations = {
-    cursor: vscode.window.createTextEditorDecorationType({ borderLeft: `2px solid ${color}` }),
-    selection: vscode.window.createTextEditorDecorationType({ backgroundColor: `${color}33` })
+    cursor: vscode.window.createTextEditorDecorationType({
+      borderLeft: `3px solid ${color}`,
+      after: {
+        contentText: ` ${name} `,
+        backgroundColor: color,
+        color: '#ffffff',
+        fontSize: '11px',
+        fontWeight: 'bold',
+        lineHeight: '1',
+        margin: '0 0 0 2px',
+        borderRadius: '3px'
+      }
+    }),
+    selection: vscode.window.createTextEditorDecorationType({
+      backgroundColor: `${color}35`,
+      border: `1px dashed ${color}80`
+    })
   };
   return decorations;
 }
@@ -256,6 +272,32 @@ function removeCursor(userId) {
   remoteCursors.delete(userId);
 }
 
+async function jumpToUserCursor(event) {
+  const userId = event.userId;
+  const remote = remoteCursors.get(userId) || (event.cursor?.path ? event.cursor : null);
+  if (!remote || !remote.path) {
+    void vscode.window.setStatusBarMessage('$(info) Thành viên chưa có con trỏ hoạt động trong tài liệu', 3000);
+    return;
+  }
+  try {
+    const uri = projectUri(remote.path);
+    if (!uri) return;
+    const document = await vscode.workspace.openTextDocument(uri);
+    const editor = await vscode.window.showTextDocument(document, { preview: false });
+    const selection = remote.selections?.[0];
+    if (selection) {
+      const activeOffset = Math.min(Math.max(0, selection.active), document.getText().length);
+      const targetPos = document.positionAt(activeOffset);
+      editor.selection = new vscode.Selection(targetPos, targetPos);
+      editor.revealRange(new vscode.Range(targetPos, targetPos), vscode.TextEditorRevealType.InCenter);
+    }
+    const name = remote.user?.name || 'thành viên';
+    void vscode.window.setStatusBarMessage(`$(eye) Đang theo dõi con trỏ của ${name}`, 4000);
+  } catch (error) {
+    console.error('Failed to jump to user cursor:', error);
+  }
+}
+
 async function poll() {
   while (!disposed && endpoint && token) {
     try {
@@ -281,6 +323,7 @@ async function poll() {
         }
         if (event.type === 'cursor:remote' && event.user?.id && Array.isArray(event.selections)) renderCursor(event);
         if (event.type === 'cursor:leave' && event.userId) removeCursor(event.userId);
+        if (event.type === 'cursor:jump' && event.userId) await jumpToUserCursor(event);
         if (event.type === 'file:ack' && event.operationId) await acknowledgeFileOperation(event);
       }
     } catch {

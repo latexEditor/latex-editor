@@ -8,6 +8,9 @@ header span { color: #64748b; font-size: 12px; }
 .list { display: flex; flex-direction: column; gap: 4px; padding-top: 7px; max-height: 270px; overflow-y: auto; }
 .person { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 6px; border-radius: 7px; }
 .person:hover { background: #f8fafc; }
+.person.jumpable { cursor: pointer; transition: background 0.15s ease; }
+.person.jumpable:hover { background: #eff6ff; }
+.jump-hint { margin-left: auto; color: #2563eb; font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: #dbeafe; white-space: nowrap; }
 .avatar-wrap { position: relative; flex: 0 0 34px; width: 34px; height: 34px; }
 .avatar, .initials { width: 34px; height: 34px; border-radius: 50%; }
 .avatar { display: block; object-fit: cover; background: #e2e8f0; }

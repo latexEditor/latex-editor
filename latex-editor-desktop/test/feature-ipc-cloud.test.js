@@ -12,21 +12,22 @@ function setup(upload, options = {}) {
   registerFeatureIpc({
     ipcMain: { removeHandler: () => {}, handle: (channel, handler) => handlers.set(channel, handler) },
     dialog: options.dialog || {},
-    workspace: { getProjectLocation: (value) => value },
+    workspace: options.workspace || { getProjectLocation: (value) => value },
     history: {
       save: async () => ({ hash: 'a'.repeat(40), unchanged: false }),
       restore: options.restore || (async () => ({ hash: 'b'.repeat(40), backup: 'c'.repeat(40) }))
     },
-    auth: { status: () => ({ signedIn: true, user: { id: 'owner', email: 'owner@example.test' } }) },
+    auth: options.auth || { status: () => ({ signedIn: true, user: { id: 'owner', email: 'owner@example.test' } }), logout: options.logout || (async () => ({ signedIn: false })) },
     cloud: { upload, deleteProject: options.deleteProject, deleteProjectById: options.deleteProjectById },
     collaboration: options.collaboration,
-    openProject: async () => {}
+    openProject: options.openProject || (async () => {})
   });
   return {
     save: (...args) => handlers.get('latex:history-save')(event, ...args),
     restore: (...args) => handlers.get('latex:history-restore')(event, ...args),
     deleteProject: (...args) => handlers.get('latex:cloud-delete-project')(event, ...args),
-    deleteById: (...args) => handlers.get('latex:cloud-delete-by-id')(event, ...args)
+    deleteById: (...args) => handlers.get('latex:cloud-delete-by-id')(event, ...args),
+    logout: (...args) => handlers.get('latex:auth-logout')(event, ...args)
   };
 }
 
@@ -142,5 +143,29 @@ test('deleting cloud project by id prompts confirmation and calls deleteProjectB
   assert.equal(result.canceled, false);
   assert.equal(result.deleted, true);
   assert.equal(deletedId, 'proj-uuid-123');
+});
+
+test('logging out wipes session state, closes collaboration, and resets open project', async () => {
+  let sessionStateCleared = false;
+  let collaborationClosed = false;
+  let resetProject = 'initial';
+
+  const { logout } = setup(async () => ({}), {
+    workspace: {
+      getProjectLocation: (value) => value,
+      clearSessionState: () => { sessionStateCleared = true; }
+    },
+    collaboration: {
+      close: () => { collaborationClosed = true; }
+    },
+    openProject: async (target) => { resetProject = target; },
+    logout: async () => ({ signedIn: false })
+  });
+
+  const result = await logout();
+  assert.equal(result.signedIn, false);
+  assert.equal(sessionStateCleared, true);
+  assert.equal(collaborationClosed, true);
+  assert.equal(resetProject, null);
 });
 

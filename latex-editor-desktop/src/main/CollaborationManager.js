@@ -35,6 +35,7 @@ class CollaborationManager {
     this.reconnectTimer = null;
     this.reconnectAttempts = 0;
     this.pendingResets = new Map();
+    this.latestCursors = new Map();
   }
 
   status() {
@@ -63,6 +64,7 @@ class CollaborationManager {
     this.participants = [];
     this.error = null;
     this.documents.clear();
+    this.latestCursors.clear();
     this.outbox = [];
     this.self = null;
     this.url = null;
@@ -139,6 +141,7 @@ class CollaborationManager {
         }
         if (message.type === 'presence' && message.action === 'leave' && message.userId
           && !this.participants.some((participant) => participant.id === message.userId)) {
+          this.latestCursors.delete(message.userId);
           this.onEditorMessage({ type: 'cursor:leave', userId: message.userId });
         }
         if (message.type === 'document:state') this.#receiveDocumentState(message);
@@ -186,6 +189,11 @@ class CollaborationManager {
           }
         }
         if (message.type === 'cursor:update' && message.user?.id) {
+          this.latestCursors.set(message.user.id, {
+            path: message.path,
+            selections: message.selections,
+            user: message.user
+          });
           this.onEditorMessage({
             type: 'cursor:remote', path: message.path,
             selections: message.selections, user: message.user
@@ -201,6 +209,7 @@ class CollaborationManager {
       }
       this.participants = [];
       this.documents.clear();
+      this.latestCursors.clear();
       this.outbox = this.outbox.filter((message) => ['file:create', 'file:delete', 'file:rename'].includes(message.type));
       this.self = null;
       if (event.code === 4003) {
@@ -347,6 +356,16 @@ class CollaborationManager {
       return false;
     }
     this.#replaceText(state, message.text, 'editor');
+    return true;
+  }
+
+  jumpToParticipant(userId) {
+    const cursor = this.latestCursors.get(userId) || null;
+    this.onEditorMessage({
+      type: 'cursor:jump',
+      userId,
+      cursor
+    });
     return true;
   }
 

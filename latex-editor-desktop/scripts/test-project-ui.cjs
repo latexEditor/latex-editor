@@ -40,7 +40,7 @@ dialog.showOpenDialog = async () => { choosingCount += 1; return { canceled: tru
 let restoreAnswer = 0;
 dialog.showMessageBox = async () => ({ response: restoreAnswer });
 registerFeatureIpc({ ipcMain, dialog, workspace: manager, history, auth, cloud,
-  openProject: async (location) => { activeProject = manager.openProject(location); notify(); }
+  openProject: async (location) => { activeProject = location ? manager.openProject(location) : null; notify(); }
 });
 
 registerIpc({
@@ -48,7 +48,7 @@ registerIpc({
   auth: { status: () => ({ signedIn: true }) },
   cloud: { upload: async () => ({ status: 'synced', project: { id: 'ui-test-cloud-project' } }) },
   runtimeManager: { getStatus: () => ({ canBuild: true, distribution: 'Test runtime', tools: [] }) },
-  openProject: async (location) => { activeProject = manager.openProject(location); notify(); },
+  openProject: async (location) => { activeProject = location ? manager.openProject(location) : null; notify(); },
   closeProject: async (location) => { activeProject = manager.closeProject(location); notify(); },
   hideEditor: () => { overlayOpen = true; },
   showEditor: () => { overlayOpen = false; },

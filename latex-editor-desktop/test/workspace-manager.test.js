@@ -304,3 +304,22 @@ test('reveal location accepts known projects or storage root only', (t) => {
   assert.equal(manager.listRecent()[0].exists, false);
   assert.throws(() => manager.getProjectLocation(project.path), /không còn tồn tại/);
 });
+
+test('clearSessionState clears open projects, recent history, and last project', (t) => {
+  const manager = fixture(t);
+  const p1 = manager.createProject('Project 1');
+  const p2 = manager.createProject('Project 2');
+  assert.equal(manager.listRecent().length, 2);
+  assert.equal(manager.listOpenProjects().length, 2);
+
+  manager.clearSessionState();
+  assert.deepEqual(manager.listRecent(), []);
+  assert.deepEqual(manager.listOpenProjects(), []);
+  const settings = JSON.parse(fs.readFileSync(manager.settingsFile, 'utf8'));
+  assert.deepEqual(settings.recentProjects, []);
+  assert.deepEqual(settings.openProjects, []);
+  assert.equal(settings.lastProject, null);
+  // Files still exist safely on disk
+  assert.equal(fs.existsSync(p1.path), true);
+  assert.equal(fs.existsSync(p2.path), true);
+});

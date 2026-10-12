@@ -2,7 +2,7 @@
   "name": "latex-editor-collaboration",
   "displayName": "LaTeX Editor Collaboration",
   "description": "Bridges code-server documents to the LaTeX Editor realtime session.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "latex-editor",
   "engines": { "vscode": "^1.93.0" },
   "categories": ["Other"],

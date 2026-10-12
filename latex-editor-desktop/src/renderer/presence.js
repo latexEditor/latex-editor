@@ -40,6 +40,17 @@
         you.className = 'you';
         you.textContent = 'Bạn';
         name.append(you);
+      } else {
+        item.classList.add('jumpable');
+        item.title = `Nhấp để nhảy tới vị trí con trỏ của ${person.name || 'thành viên'}`;
+        const jumpHint = document.createElement('span');
+        jumpHint.className = 'jump-hint';
+        jumpHint.textContent = '👁 Theo dõi';
+        name.append(jumpHint);
+        item.addEventListener('click', async () => {
+          await window.presenceWindow.jumpToUser(person.id);
+          window.presenceWindow.close();
+        });
       }
       const role = document.createElement('div');
       role.className = 'role';

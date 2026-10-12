@@ -13,7 +13,7 @@ const { CollaborationBridge } = require('./CollaborationBridge');
 const { PresenceWindowManager } = require('./PresenceWindowManager');
 const { registerFeatureIpc } = require('./featureIpc');
 
-const TOPBAR_HEIGHT = 38;
+const TOPBAR_HEIGHT = 32;
 let mainWindow;
 let editorView;
 let serverManager;
@@ -51,13 +51,28 @@ function layoutEditor() {
     hideEditor();
     return;
   }
+  try {
+    if (!mainWindow.contentView?.children?.includes(editorView)) {
+      mainWindow.contentView.addChildView(editorView);
+    }
+    editorView.setVisible(true);
+  } catch {}
   const [width, height] = mainWindow.getContentSize();
   editorView.setBounds({ x: 0, y: TOPBAR_HEIGHT, width, height: Math.max(0, height - TOPBAR_HEIGHT) });
 }
 
 function hideEditor() {
   if (!mainWindow || !editorView) return;
-  editorView.setBounds({ x: 0, y: 0, width: 0, height: 0 });
+  try { editorView.setVisible(false); } catch {}
+  try {
+    if (mainWindow.contentView?.children?.includes(editorView)) {
+      mainWindow.contentView.removeChildView(editorView);
+    }
+  } catch {}
+  editorView.setBounds({ x: -10000, y: -10000, width: 0, height: 0 });
+  if (mainWindow?.webContents && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.focus();
+  }
 }
 
 function showEditor() {
@@ -143,9 +158,16 @@ async function loadProject(projectPath) {
   const target = workspaceManager.codeServerUrl(config.host, serverManager.port, activeProject.path);
   showEditor();
   notifyState();
-  await editorView.webContents.loadURL(target.toString());
-  await applyEditorCustomizations();
+  const currentUrl = editorView?.webContents?.getURL();
+  if (!currentUrl || currentUrl === 'about:blank' || currentUrl !== target.toString()) {
+    await editorView.webContents.loadURL(target.toString());
+    await applyEditorCustomizations();
+  }
   showEditor();
+  if (editorView?.webContents) {
+    editorView.webContents.focus();
+    editorView.webContents.executeJavaScript('window.dispatchEvent(new Event("resize"));').catch(() => {});
+  }
   collaborationManager?.open(activeProject.path).catch(() => {});
   notifyState();
   return activeProject;
@@ -264,8 +286,19 @@ async function startup() {
     openProject: loadProject,
     closeProject: closeProjectTab,
     hideEditor: () => { shellOverlayOpen = true; hideEditor(); },
-    showEditor: () => { shellOverlayOpen = false; showEditor(); },
+    showEditor: () => {
+      shellOverlayOpen = false;
+      showEditor();
+      if (activeProject && editorView?.webContents) {
+        editorView.webContents.focus();
+        editorView.webContents.executeJavaScript('window.dispatchEvent(new Event("resize"));').catch(() => {});
+      }
+    },
     togglePresencePopover: (anchor) => presenceWindowManager?.toggle(anchor) || false,
+    jumpToUser: (userId) => {
+      presenceWindowManager?.close();
+      return collaborationManager?.jumpToParticipant(userId);
+    },
     getState: state
   });
   session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));

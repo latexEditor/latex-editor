@@ -118,6 +118,15 @@ class WorkspaceManager {
     return this.listRecent();
   }
 
+  clearSessionState() {
+    const settings = this.#readSettings();
+    settings.recentProjects = [];
+    settings.openProjects = [];
+    settings.lastProject = null;
+    this.fs.writeFileSync(this.settingsFile, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
+    return [];
+  }
+
   getProjectLocation(projectPath) {
     if (!projectPath) return this.projectsDir;
     const resolved = path.resolve(projectPath);

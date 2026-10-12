@@ -47,7 +47,14 @@ body { background: #ffffff; user-select: none; }
   position: relative;
   z-index: 100;
 }
-.topbar button, .topbar .project-tabs {
+.topbar button,
+.topbar button *,
+.topbar .project-tabs,
+.topbar .project-tabs *,
+.topbar .toolbar-button,
+.topbar .toolbar-button *,
+.topbar .feature-button,
+.topbar .feature-button * {
   -webkit-app-region: no-drag;
 }
 

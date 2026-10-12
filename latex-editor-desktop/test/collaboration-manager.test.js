@@ -225,3 +225,28 @@ test('restoring a snapshot replaces the manifest and waits for every draft ACK',
   assert.deepEqual(await resetPromise, { reset: true, documents: 2 });
   manager.close();
 });
+
+test('jumpToParticipant publishes cursor:jump event with tracked cursor info', async () => {
+  FakeWebSocket.instances = [];
+  const editorEvents = [];
+  const { manager } = fixture(undefined, { onEditorMessage: (message) => editorEvents.push(message) });
+  await manager.open('D:\\cloud');
+  const socket = FakeWebSocket.instances[0];
+  socket.emit('open');
+
+  socket.emit('message', { data: JSON.stringify({
+    type: 'cursor:update',
+    path: 'chapters/intro.tex',
+    selections: [{ anchor: 10, active: 15 }],
+    user: { id: 'user-b', name: 'User B' }
+  }) });
+
+  assert.equal(editorEvents.at(-1).type, 'cursor:remote');
+
+  manager.jumpToParticipant('user-b');
+  assert.equal(editorEvents.at(-1).type, 'cursor:jump');
+  assert.equal(editorEvents.at(-1).userId, 'user-b');
+  assert.equal(editorEvents.at(-1).cursor.path, 'chapters/intro.tex');
+  assert.deepEqual(editorEvents.at(-1).cursor.selections, [{ anchor: 10, active: 15 }]);
+  manager.close();
+});

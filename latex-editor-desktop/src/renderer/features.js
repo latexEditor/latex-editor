@@ -244,7 +244,7 @@
       download.textContent = 'Tải bản sao';
       download.addEventListener('click', () => cloudAction(async () => {
         const copy = await api.cloudDownload(project.id);
-        feedback('#account-feedback', `Đã tải ${copy.name}, kèm lịch sử phiên bản.`);
+        feedback('#account-feedback', `Đã tải ${copy.name}, kèm lịch sử phiên bản. Bấm tab trên thanh công cụ hoặc Đóng để làm việc.`);
       }));
       actions.append(download);
 
@@ -338,8 +338,10 @@
   });
   $('#account-logout').addEventListener('click', async () => {
     try {
-      const result = await api.logout(); renderAuth(result);
-      feedback('#account-feedback', result.warning || 'Đã đăng xuất. File local được giữ nguyên.');
+      const result = await api.logout();
+      renderAuth(result);
+      if (typeof window.refreshRecentProjects === 'function') await window.refreshRecentProjects();
+      feedback('#account-feedback', result.warning || 'Đã đăng xuất. Toàn bộ tab đang mở và lịch sử gần đây đã được dọn sạch để bảo mật.');
     } catch (error) { feedback('#account-feedback', error.message, true); }
   });
   $('#cloud-upload').addEventListener('click', () => cloudAction(async () => {

@@ -47,7 +47,15 @@ function registerFeatureIpc({ ipcMain, dialog, workspace, history, auth, cloud, 
     },
     'latex:auth-status': () => auth.status(),
     'latex:auth-login': () => auth.login(),
-    'latex:auth-logout': () => auth.logout(),
+    'latex:auth-logout': async () => {
+      const result = await auth.logout();
+      if (workspace?.clearSessionState) workspace.clearSessionState();
+      if (collaboration?.close) collaboration.close();
+      if (openProject) {
+        try { await openProject(null); } catch {}
+      }
+      return result;
+    },
     'latex:cloud-list': () => cloud.list(),
     'latex:cloud-upload': (_event, value) => cloud.upload(project(value)),
     'latex:cloud-download': async (_event, id) => {

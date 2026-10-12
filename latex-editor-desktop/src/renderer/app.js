@@ -51,6 +51,7 @@ async function refreshRecentProjects() {
   recentProjects = projects;
   renderRecentProjects();
 }
+window.refreshRecentProjects = refreshRecentProjects;
 
 function renderRecentProjects() {
   const query = document.querySelector('#project-search').value.trim().toLocaleLowerCase('vi');
@@ -291,8 +292,14 @@ function renderProjectTabs(projects, activeProject) {
     name.textContent = project.name;
     openButton.append(symbol, name);
     openButton.addEventListener('click', async () => {
-      if (samePath(project.path, currentState.project?.path)) return;
-      try { await api.openProject(project.path); } catch (error) { window.alert(error.message); }
+      try {
+        for (const dialog of document.querySelectorAll('dialog')) {
+          if (dialog.open) dialog.close();
+        }
+        await api.openProject(project.path);
+      } catch (error) {
+        window.alert(error.message);
+      }
     });
 
     const closeButton = document.createElement('button');
@@ -301,7 +308,9 @@ function renderProjectTabs(projects, activeProject) {
     closeButton.title = `Đóng ${project.name}`;
     closeButton.setAttribute('aria-label', `Đóng project ${project.name}`);
     closeButton.textContent = '×';
-    closeButton.addEventListener('click', async () => {
+    closeButton.addEventListener('click', async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
       try { await api.closeProject(project.path); } catch (error) { window.alert(error.message); }
     });
 
