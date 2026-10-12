@@ -42,35 +42,40 @@ function state() {
 }
 
 function updateEditorPresence() {
-  if (!editorView?.webContents || editorView.webContents.isDestroyed()) return;
-  const current = state();
-  const collab = current.collaboration || { enabled: false, connection: 'offline', participants: [] };
-  const visible = Boolean(activeProject);
-  const count = collab.enabled && collab.participants?.length ? collab.participants.length : 1;
-  const currentUser = current.auth?.user;
-  const selfParticipant = currentUser
-    ? [{
-        id: currentUser.id || 'self',
-        name: currentUser.name,
-        role: 'owner',
-        email: currentUser.email,
-        avatarUrl: currentUser.avatar_url || currentUser.avatarUrl || currentUser.picture || null,
-        isSelf: true
-      }]
-    : [{ id: 'self', name: 'You', role: 'owner', avatarUrl: null, isSelf: true }];
-  const participants = (collab.enabled && collab.participants?.length)
-    ? collab.participants
-    : selfParticipant;
-  const data = {
-    visible,
-    count,
-    status,
-    participants,
-    error: collab.error || null
-  };
-  editorView.webContents.executeJavaScript(`
-    window.__latexUpdatePresence?.(${JSON.stringify(data)});
-  `).catch(() => {});
+  try {
+    if (!editorView?.webContents || editorView.webContents.isDestroyed()) return;
+    const current = state();
+    const collab = current.collaboration || { enabled: false, connection: 'offline', participants: [] };
+    const visible = Boolean(activeProject);
+    const count = collab.enabled && collab.participants?.length ? collab.participants.length : 1;
+    const currentUser = current.auth?.user;
+    const selfParticipant = currentUser
+      ? [{
+          id: currentUser.id || 'self',
+          name: currentUser.name,
+          role: 'owner',
+          email: currentUser.email,
+          avatarUrl: currentUser.avatar_url || currentUser.avatarUrl || currentUser.picture || null,
+          isSelf: true
+        }]
+      : [{ id: 'self', name: 'You', role: 'owner', avatarUrl: null, isSelf: true }];
+    const participants = (collab.enabled && collab.participants?.length)
+      ? collab.participants
+      : selfParticipant;
+    const status = collab.connection || 'offline';
+    const data = {
+      visible,
+      count,
+      status,
+      participants,
+      error: collab.error || null
+    };
+    editorView.webContents.executeJavaScript(`
+      window.__latexUpdatePresence?.(${JSON.stringify(data)});
+    `).catch(() => {});
+  } catch (error) {
+    console.warn('Failed to update editor presence:', error);
+  }
 }
 
 function notifyState() {
