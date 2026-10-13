@@ -193,7 +193,7 @@ const EDITOR_CUSTOM_CSS = `
     align-items: center !important;
     cursor: pointer !important;
     user-select: none !important;
-    padding: 2px !important;
+    padding: 1px !important;
     border-radius: 9999px !important;
     transition: transform 0.15s ease, filter 0.15s ease !important;
     -webkit-app-region: no-drag !important;
@@ -208,14 +208,14 @@ const EDITOR_CUSTOM_CSS = `
   }
   #latex-editor-presence-pill .stack-avatar {
     position: relative !important;
-    width: 25px !important;
-    height: 25px !important;
+    width: 20px !important;
+    height: 20px !important;
     border-radius: 50% !important;
-    border: 2px solid #ffffff !important;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12) !important;
+    border: 1.5px solid #ffffff !important;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12) !important;
     background: #e0e7ff !important;
     color: #4338ca !important;
-    font-size: 10px !important;
+    font-size: 8.5px !important;
     font-weight: 700 !important;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
     display: grid !important;
@@ -225,10 +225,10 @@ const EDITOR_CUSTOM_CSS = `
     transition: transform 0.15s ease, z-index 0.15s ease !important;
   }
   #latex-editor-presence-pill .stack-avatar:not(:first-child) {
-    margin-left: -7px !important;
+    margin-left: -5px !important;
   }
   #latex-editor-presence-pill .stack-avatar:hover {
-    transform: scale(1.12) !important;
+    transform: scale(1.15) !important;
     z-index: 10 !important;
   }
   #latex-editor-presence-pill .stack-avatar img {
@@ -242,30 +242,30 @@ const EDITOR_CUSTOM_CSS = `
   }
   #latex-editor-presence-pill .stack-overflow {
     position: relative !important;
-    width: 25px !important;
-    height: 25px !important;
+    width: 20px !important;
+    height: 20px !important;
     border-radius: 50% !important;
-    border: 2px solid #ffffff !important;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12) !important;
+    border: 1.5px solid #ffffff !important;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12) !important;
     background: #f1f5f9 !important;
     color: #475569 !important;
-    font-size: 9.5px !important;
+    font-size: 8px !important;
     font-weight: 700 !important;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
     display: grid !important;
     place-items: center !important;
-    margin-left: -7px !important;
+    margin-left: -5px !important;
     flex-shrink: 0 !important;
   }
   #latex-editor-presence-pill .stack-dot {
     position: absolute !important;
     right: 0 !important;
     bottom: 0 !important;
-    width: 7.5px !important;
-    height: 7.5px !important;
+    width: 6px !important;
+    height: 6px !important;
     border-radius: 50% !important;
     background: #10b981 !important;
-    border: 1.5px solid #ffffff !important;
+    border: 1px solid #ffffff !important;
     pointer-events: none !important;
     z-index: 20 !important;
   }
