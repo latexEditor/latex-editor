@@ -184,28 +184,18 @@ const EDITOR_CUSTOM_CSS = `
   }
 
   #latex-editor-presence-pill {
-    display: inline-flex !important;
-    align-items: center !important;
-    gap: 6px !important;
     position: absolute !important;
-    top: 5px !important;
+    top: 50% !important;
+    transform: translateY(-50%) !important;
     right: 142px !important;
     z-index: 100 !important;
-    height: 22px !important;
-    padding: 0 9px !important;
-    margin: 0 !important;
-    border-radius: 11px !important;
-    background: rgba(16, 185, 129, 0.1) !important;
-    border: 1px solid rgba(16, 185, 129, 0.3) !important;
-    color: #059669 !important;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
-    font-size: 11.5px !important;
-    font-weight: 500 !important;
-    line-height: 1 !important;
+    display: inline-flex !important;
+    align-items: center !important;
     cursor: pointer !important;
     user-select: none !important;
-    transition: all 0.15s ease !important;
-    flex-shrink: 0 !important;
+    padding: 2px !important;
+    border-radius: 9999px !important;
+    transition: transform 0.15s ease, filter 0.15s ease !important;
     -webkit-app-region: no-drag !important;
     pointer-events: auto !important;
   }
@@ -214,33 +204,77 @@ const EDITOR_CUSTOM_CSS = `
     pointer-events: auto !important;
   }
   #latex-editor-presence-pill:hover {
-    background: rgba(16, 185, 129, 0.16);
-    border-color: rgba(16, 185, 129, 0.45);
-    color: #047857;
+    filter: brightness(0.96) !important;
   }
-  #latex-editor-presence-pill.connecting {
-    background: rgba(245, 158, 11, 0.08);
-    border-color: rgba(245, 158, 11, 0.25);
-    color: #d97706;
+  #latex-editor-presence-pill .stack-avatar {
+    position: relative !important;
+    width: 25px !important;
+    height: 25px !important;
+    border-radius: 50% !important;
+    border: 2px solid #ffffff !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12) !important;
+    background: #e0e7ff !important;
+    color: #4338ca !important;
+    font-size: 10px !important;
+    font-weight: 700 !important;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+    display: grid !important;
+    place-items: center !important;
+    overflow: hidden !important;
+    flex-shrink: 0 !important;
+    transition: transform 0.15s ease, z-index 0.15s ease !important;
   }
-  #latex-editor-presence-pill.error {
-    background: rgba(239, 68, 68, 0.08);
-    border-color: rgba(239, 68, 68, 0.25);
-    color: #dc2626;
+  #latex-editor-presence-pill .stack-avatar:not(:first-child) {
+    margin-left: -7px !important;
   }
-  #latex-editor-presence-pill .presence-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: #10b981;
-    flex-shrink: 0;
+  #latex-editor-presence-pill .stack-avatar:hover {
+    transform: scale(1.12) !important;
+    z-index: 10 !important;
   }
-  #latex-editor-presence-pill.connecting .presence-dot {
-    background: #f59e0b;
-    animation: latex-presence-pulse 1.5s infinite;
+  #latex-editor-presence-pill .stack-avatar img {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    border-radius: 50% !important;
+    object-fit: cover !important;
+    display: block !important;
   }
-  #latex-editor-presence-pill.error .presence-dot {
-    background: #ef4444;
+  #latex-editor-presence-pill .stack-overflow {
+    position: relative !important;
+    width: 25px !important;
+    height: 25px !important;
+    border-radius: 50% !important;
+    border: 2px solid #ffffff !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12) !important;
+    background: #f1f5f9 !important;
+    color: #475569 !important;
+    font-size: 9.5px !important;
+    font-weight: 700 !important;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+    display: grid !important;
+    place-items: center !important;
+    margin-left: -7px !important;
+    flex-shrink: 0 !important;
+  }
+  #latex-editor-presence-pill .stack-dot {
+    position: absolute !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 7.5px !important;
+    height: 7.5px !important;
+    border-radius: 50% !important;
+    background: #10b981 !important;
+    border: 1.5px solid #ffffff !important;
+    pointer-events: none !important;
+    z-index: 20 !important;
+  }
+  #latex-editor-presence-pill.connecting .stack-dot {
+    background: #f59e0b !important;
+    animation: latex-presence-pulse 1.5s infinite !important;
+  }
+  #latex-editor-presence-pill.error .stack-dot {
+    background: #ef4444 !important;
   }
   #latex-editor-presence-popover {
     position: fixed !important;
@@ -455,6 +489,88 @@ const EDITOR_CUSTOM_SCRIPT = `
       }
     }
 
+    const AVATAR_PALETTE = [
+      { bg: '#e0e7ff', text: '#4338ca' },
+      { bg: '#d1fae5', text: '#065f46' },
+      { bg: '#fef3c7', text: '#92400e' },
+      { bg: '#fce7f3', text: '#9d174d' },
+      { bg: '#e0f2fe', text: '#0369a1' },
+      { bg: '#f3e8ff', text: '#6b21a8' }
+    ];
+
+    function getAvatarColor(str) {
+      let hash = 0;
+      const s = String(str || '');
+      for (let i = 0; i < s.length; i++) hash = (hash << 5) - hash + s.charCodeAt(i);
+      return AVATAR_PALETTE[Math.abs(hash) % AVATAR_PALETTE.length];
+    }
+
+    function renderAvatarStack(pill) {
+      pill.replaceChildren();
+
+      const data = window.__latexLatestPresence || latestData || {};
+      const fallbackUser = data.currentUser || { name: 'Bạn', role: 'owner', isSelf: true, avatarUrl: null };
+      const people = Array.isArray(data.participants) && data.participants.length
+        ? data.participants
+        : [fallbackUser];
+
+      const MAX_VISIBLE = 3;
+      const visiblePeople = people.slice(0, MAX_VISIBLE);
+      const overflowCount = people.length - MAX_VISIBLE;
+
+      visiblePeople.forEach((person) => {
+        const item = document.createElement('div');
+        item.className = 'stack-avatar';
+        const color = getAvatarColor(person.id || person.name);
+        item.style.background = color.bg;
+        item.style.color = color.text;
+
+        const initialsSpan = document.createElement('span');
+        initialsSpan.textContent = initials(person.name);
+        item.appendChild(initialsSpan);
+
+        const imageUrl = person.avatarUrl || person.avatar_url || person.avatar || person.picture;
+        if (imageUrl) {
+          const img = document.createElement('img');
+          img.alt = '';
+          img.referrerPolicy = 'no-referrer';
+          img.src = imageUrl;
+          img.addEventListener('load', () => {
+            initialsSpan.style.display = 'none';
+            item.style.background = 'transparent';
+          }, { once: true });
+          img.addEventListener('error', () => {
+            img.remove();
+            initialsSpan.style.display = '';
+          }, { once: true });
+          item.appendChild(img);
+        }
+
+        const roleText = person.role === 'owner' ? 'Chủ sở hữu' : (person.role === 'editor' ? 'Chỉnh sửa' : 'Xem');
+        const nameText = person.isSelf ? (person.name === 'Bạn' ? 'Bạn' : (person.name + ' (Bạn)')) : (person.name || 'Thành viên');
+        item.title = nameText + ' · ' + roleText;
+        pill.appendChild(item);
+      });
+
+      if (overflowCount > 0) {
+        const overflowEl = document.createElement('div');
+        overflowEl.className = 'stack-overflow';
+        overflowEl.textContent = '+' + overflowCount;
+        overflowEl.title = 'và ' + overflowCount + ' người khác đang online';
+        pill.appendChild(overflowEl);
+      }
+
+      const dot = document.createElement('span');
+      dot.className = 'stack-dot';
+      pill.appendChild(dot);
+
+      pill.title = people.map((p) => {
+        const role = p.role === 'owner' ? 'Chủ sở hữu' : (p.role === 'editor' ? 'Chỉnh sửa' : 'Xem');
+        const name = p.isSelf ? (p.name === 'Bạn' ? 'Bạn' : (p.name + ' (Bạn)')) : (p.name || 'Thành viên');
+        return name + ' (' + role + ')';
+      }).join('\\n') + '\\n(Nhấp để xem danh sách)';
+    }
+
     function ensurePill() {
       cleanTitle();
       let pill = document.querySelector('#latex-editor-presence-pill');
@@ -474,7 +590,6 @@ const EDITOR_CUSTOM_SCRIPT = `
         pill.setAttribute('tabindex', '0');
         pill.setAttribute('aria-haspopup', 'dialog');
         pill.setAttribute('aria-expanded', 'false');
-        pill.innerHTML = '<span class="presence-dot"></span><span class="presence-text">1 online</span>';
         pill.addEventListener('click', async (event) => {
           event.stopPropagation();
           if (document.querySelector('#latex-editor-presence-popover')) {
@@ -507,19 +622,8 @@ const EDITOR_CUSTOM_SCRIPT = `
       pill.className = latestData.status === 'connecting'
         ? 'connecting'
         : (latestData.status === 'error' || latestData.status === 'revoked' ? 'error' : '');
-      
-      const textEl = pill.querySelector('.presence-text');
-      if (textEl) {
-        textEl.textContent = latestData.status === 'connecting'
-          ? 'Connecting…'
-          : latestData.status === 'revoked'
-            ? 'Revoked'
-            : (String(latestData.count || 1) + ' online');
-      }
 
-      pill.title = latestData.participants.length
-        ? latestData.participants.map((p) => (p.name + ' (' + p.role + ')')).join('\\n')
-        : 'No other collaborators';
+      renderAvatarStack(pill);
     }
 
     function scheduleEnsurePill() {
