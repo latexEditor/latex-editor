@@ -371,6 +371,27 @@ const EDITOR_CUSTOM_CSS = `
     color: #64748b !important;
     font-size: 11.5px !important;
   }
+  #latex-editor-presence-popover .presence-person.jumpable {
+    cursor: pointer !important;
+    border-radius: 8px !important;
+    padding: 6px 8px !important;
+    margin: 2px -6px !important;
+    transition: background 0.15s ease !important;
+  }
+  #latex-editor-presence-popover .presence-person.jumpable:hover {
+    background: #f1f5f9 !important;
+  }
+  #latex-editor-presence-popover .presence-jump-hint {
+    margin-left: auto !important;
+    font-size: 11px !important;
+    color: #4338ca !important;
+    background: #e0e7ff !important;
+    padding: 3px 8px !important;
+    border-radius: 9999px !important;
+    font-weight: 600 !important;
+    white-space: nowrap !important;
+    flex-shrink: 0 !important;
+  }
   @keyframes latex-presence-pulse { 50% { opacity: 0.4; } }
 `;
 
@@ -443,6 +464,22 @@ const EDITOR_CUSTOM_SCRIPT = `
       details.append(name, role);
 
       row.append(avatarWrap, details);
+
+      if (!person.isSelf && person.id) {
+        row.classList.add('jumpable');
+        row.title = 'Nhấp để nhảy tới vị trí con trỏ của ' + displayName;
+        const jumpBtn = document.createElement('span');
+        jumpBtn.className = 'presence-jump-hint';
+        jumpBtn.textContent = '👁 Theo dõi';
+        row.appendChild(jumpBtn);
+        row.addEventListener('click', async () => {
+          closePopover();
+          if (window.latexDesktopBridge?.jumpToUser) {
+            await window.latexDesktopBridge.jumpToUser(person.id);
+          }
+        });
+      }
+
       return row;
     }
 
@@ -548,7 +585,19 @@ const EDITOR_CUSTOM_SCRIPT = `
 
         const roleText = person.role === 'owner' ? 'Chủ sở hữu' : (person.role === 'editor' ? 'Chỉnh sửa' : 'Xem');
         const nameText = person.isSelf ? (person.name === 'Bạn' ? 'Bạn' : (person.name + ' (Bạn)')) : (person.name || 'Thành viên');
-        item.title = nameText + ' · ' + roleText;
+        if (!person.isSelf && person.id) {
+          item.style.cursor = 'pointer';
+          item.title = nameText + ' · ' + roleText + ' (Nhấp để theo dõi con trỏ)';
+          item.addEventListener('click', async (event) => {
+            event.stopPropagation();
+            closePopover();
+            if (window.latexDesktopBridge?.jumpToUser) {
+              await window.latexDesktopBridge.jumpToUser(person.id);
+            }
+          });
+        } else {
+          item.title = nameText + ' · ' + roleText;
+        }
         pill.appendChild(item);
       });
 
