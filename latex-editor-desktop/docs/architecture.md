@@ -64,7 +64,7 @@ Electron main process
 
 ## 7. Đóng gói và Phân phối Ứng dụng
 
-- **Electron Builder & NSIS**: Cấu hình đóng gói installer Windows x64 (`dist/LaTeX Editor Setup 0.1.0.exe`) và thư mục unpacked (`dist/win-unpacked`).
+- **Electron Builder & NSIS/Portable**: Cấu hình đóng gói installer Windows x64 (`dist/LaTeX Editor Setup 0.5.0.exe`), bản portable không cần cài đặt (`dist/LaTeX Editor-0.5.0-portable.exe`) và thư mục unpacked (`dist/win-unpacked`).
 - **Đóng gói Runtime & Tiện ích mở rộng**:
   - Node.js 20.19.5 x64 và code-server portable được đưa vào `resources/runtime/`.
   - Extension `LaTeX Workshop` (10.7.4 universal) được nhúng sẵn trong `resources/extensions/` và tự động cài đặt vào `%APPDATA%\LatexEditor\extensions` khi khởi động lần đầu, hoàn toàn không cần tải từ mạng.
