@@ -375,7 +375,8 @@ export async function handleRequest(request, env, fetcher = fetch) {
       const result = await env.DB.prepare(
         'UPDATE invitations SET status = \'revoked\' WHERE id = ? AND email = ? AND status = \'pending\''
       ).bind(invitationId, userEmail).run();
-      if (!result.changes) throw new HttpError(404, 'Lời mời không tồn tại hoặc đã xử lý.');
+      const changes = result.meta?.changes ?? result.changes;
+      if (!changes) throw new HttpError(404, 'Lời mời không tồn tại hoặc đã xử lý.');
       return json({ declined: true });
     }
 
@@ -467,7 +468,8 @@ export async function handleRequest(request, env, fetcher = fetch) {
       const result = await env.DB.prepare(
         'UPDATE projects SET name = ?, head = ?, bundle_key = ?, updated_at = ? WHERE id = ? AND updated_at = ?'
       ).bind(name, head, bundleKey, now, projectId, project.updated_at).run();
-      if (!result.changes) {
+      const changes = result.meta?.changes ?? result.changes;
+      if (!changes) {
         await env.PROJECTS.delete(bundleKey);
         throw new HttpError(409, 'Xung đột: project vừa được cập nhật từ máy khác.');
       }
@@ -584,7 +586,8 @@ export async function handleRequest(request, env, fetcher = fetch) {
       const invId = revokeMatch[1];
       if (!ID.test(invId)) throw new HttpError(400, 'Mã lời mời không hợp lệ.');
       const result = await env.DB.prepare('UPDATE invitations SET status = \'revoked\' WHERE id = ? AND project_id = ? AND status = \'pending\'').bind(invId, projectId).run();
-      if (!result.changes) throw new HttpError(404, 'Lời mời không tồn tại hoặc đã xử lý.');
+      const changes = result.meta?.changes ?? result.changes;
+      if (!changes) throw new HttpError(404, 'Lời mời không tồn tại hoặc đã xử lý.');
       return json({ revoked: true });
     }
 

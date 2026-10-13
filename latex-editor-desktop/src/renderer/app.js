@@ -92,8 +92,9 @@ function renderProjectList(container, projects, errorSelector) {
       open.disabled = true;
       document.querySelector(errorSelector).textContent = '';
       try {
-        await api.openProject(project.path);
         if (recentDialog.open) recentDialog.close();
+        await api.showEditor();
+        await api.openProject(project.path);
       } catch (error) {
         document.querySelector(errorSelector).textContent = error.message;
       } finally {
@@ -284,29 +285,39 @@ function renderProjectTabs(projects, activeProject) {
     const openButton = document.createElement('button');
     openButton.className = 'project-tab-open';
     openButton.type = 'button';
-    const symbol = document.createElement('span');
-    symbol.className = 'project-symbol';
-    symbol.textContent = 'Tₑ';
     const name = document.createElement('span');
     name.className = 'project-tab-name';
     name.textContent = project.name;
-    openButton.append(symbol, name);
-    openButton.addEventListener('click', async () => {
+    openButton.append(name);
+    const handleOpen = async () => {
       try {
         for (const dialog of document.querySelectorAll('dialog')) {
           if (dialog.open) dialog.close();
+        }
+        if (samePath(project.path, currentState?.project?.path)) {
+          await api.showEditor();
+          return;
         }
         await api.openProject(project.path);
       } catch (error) {
         window.alert(error.message);
       }
+    };
+
+    openButton.addEventListener('click', (event) => {
+      event.stopPropagation();
+      handleOpen();
+    });
+    tab.addEventListener('click', (event) => {
+      if (event.target.closest('.project-tab-close')) return;
+      handleOpen();
     });
 
     const closeButton = document.createElement('button');
     closeButton.className = 'project-tab-close';
     closeButton.type = 'button';
-    closeButton.title = `Đóng ${project.name}`;
-    closeButton.setAttribute('aria-label', `Đóng project ${project.name}`);
+    closeButton.title = `Close ${project.name}`;
+    closeButton.setAttribute('aria-label', `Close ${project.name}`);
     closeButton.textContent = '×';
     closeButton.addEventListener('click', async (event) => {
       event.preventDefault();
@@ -325,7 +336,7 @@ function renderState(next) {
   renderProjectTabs(next.openProjects || [], next.project);
   document.querySelector('#empty-workspace').hidden = Boolean(next.project);
   document.querySelector('#status-dot').className = `dot ${ready ? 'ok' : 'checking'}`;
-  document.querySelector('#status-text').textContent = ready ? 'Editor sẵn sàng' : 'Đang kết nối…';
+  document.querySelector('#status-text').textContent = ready ? 'Editor Ready' : 'Connecting…';
   for (const id of ['new-project-location', 'recent-project-location']) {
     document.getElementById(id).textContent = next.projectsDir || '';
   }
@@ -340,8 +351,8 @@ async function inspectRuntime() {
   runtimeStatus = await api.getRuntimeStatus();
   document.querySelector('#runtime-dot').className = `dot ${runtimeStatus.canBuild ? 'ok' : 'bad'}`;
   document.querySelector('#runtime-label').textContent = runtimeStatus.canBuild
-    ? `${runtimeStatus.distribution} sẵn sàng`
-    : 'Thiếu LaTeX runtime';
+    ? `${runtimeStatus.distribution} Ready`
+    : 'LaTeX Missing';
 }
 
 document.querySelector('#new-project').addEventListener('click', async () => {

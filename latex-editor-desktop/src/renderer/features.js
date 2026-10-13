@@ -129,9 +129,73 @@
   }
 
   function renderAuth(auth) {
-    $('#account-label').textContent = auth.signedIn ? 'Đã đăng nhập' : 'Tài khoản';
+    const avatarEl = $('#account-avatar');
+    const labelEl = $('#account-label');
+    const btn = $('#account-button');
+
+    if (auth.signedIn && auth.user) {
+      btn.title = `${auth.user.name} (${auth.user.email}) · Account & Cloud sync`;
+      labelEl.textContent = '';
+      labelEl.hidden = true;
+      if (avatarEl) {
+        const userAvatar = auth.user.avatarUrl || auth.user.avatar_url || auth.user.picture;
+        const initial = (auth.user.name || 'U').trim()[0].toUpperCase();
+        if (userAvatar) {
+          avatarEl.innerHTML = `<img src="${encodeURI(userAvatar)}" class="account-avatar-img" alt="${auth.user.name}" referrerpolicy="no-referrer">`;
+          const img = avatarEl.querySelector('img');
+          img?.addEventListener('error', () => {
+            avatarEl.innerHTML = `<span class="account-avatar-initial">${initial}</span>`;
+          });
+        } else {
+          avatarEl.innerHTML = `<span class="account-avatar-initial">${initial}</span>`;
+        }
+        avatarEl.hidden = false;
+      }
+      btn.classList.add('signed-in');
+    } else {
+      btn.title = auth.configured ? (auth.signingIn ? 'Completing sign in in browser…' : 'Login to sync projects & collaborate') : 'Account & Local projects';
+      labelEl.textContent = auth.signingIn ? 'Signing in…' : 'Login';
+      labelEl.hidden = false;
+      if (avatarEl) {
+        avatarEl.innerHTML = `
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="account-avatar-icon">
+            <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path>
+            <circle cx="12" cy="7" r="4"></circle>
+          </svg>
+        `;
+        avatarEl.hidden = false;
+      }
+      btn.classList.remove('signed-in');
+    }
+
+    const profileCard = $('#account-profile-card');
+    if (profileCard) {
+      if (auth.signedIn && auth.user) {
+        profileCard.hidden = false;
+        $('#account-profile-name').textContent = auth.user.name || 'Người dùng';
+        $('#account-profile-email').textContent = auth.user.email || '';
+        const dialogAvatar = $('#account-dialog-avatar');
+        if (dialogAvatar) {
+          const userAvatar = auth.user.avatarUrl || auth.user.avatar_url || auth.user.picture;
+          const initial = (auth.user.name || 'U').trim()[0].toUpperCase();
+          if (userAvatar) {
+            dialogAvatar.innerHTML = `<img src="${encodeURI(userAvatar)}" class="account-avatar-img" alt="${auth.user.name}" referrerpolicy="no-referrer">`;
+            const img = dialogAvatar.querySelector('img');
+            img?.addEventListener('error', () => {
+              dialogAvatar.innerHTML = `<span class="account-avatar-initial">${initial}</span>`;
+            });
+          } else {
+            dialogAvatar.innerHTML = `<span class="account-avatar-initial">${initial}</span>`;
+          }
+        }
+      } else {
+        profileCard.hidden = true;
+      }
+    }
+
+    $('#account-description').hidden = auth.signedIn;
     $('#account-description').textContent = auth.signedIn
-      ? `${auth.user.name} · ${auth.user.email}`
+      ? ''
       : auth.configured ? (auth.signingIn ? 'Hoàn tất đăng nhập trong trình duyệt vừa mở.' : 'Đăng nhập để đồng bộ project và lịch sử giữa các máy.')
         : 'Cloud chưa được thiết lập cho bản ứng dụng này. Bạn vẫn có thể dùng project và lịch sử local.';
     $('#google-login').hidden = auth.signedIn;
@@ -199,6 +263,9 @@
                 await refreshInvitationsBadge();
                 if (res.projectId) {
                   const copy = await api.cloudDownload(res.projectId);
+                  if (accountDialog.open) accountDialog.close();
+                  await api.showEditor();
+                  await api.openProject(copy.path);
                   feedback('#account-feedback', `Đã tải và mở dự án ${copy.name}.`);
                 }
               }));
@@ -244,7 +311,10 @@
       download.textContent = 'Tải bản sao';
       download.addEventListener('click', () => cloudAction(async () => {
         const copy = await api.cloudDownload(project.id);
-        feedback('#account-feedback', `Đã tải ${copy.name}, kèm lịch sử phiên bản. Bấm tab trên thanh công cụ hoặc Đóng để làm việc.`);
+        if (accountDialog.open) accountDialog.close();
+        await api.showEditor();
+        await api.openProject(copy.path);
+        feedback('#account-feedback', `Đã tải ${copy.name}, kèm lịch sử phiên bản.`);
       }));
       actions.append(download);
 
@@ -368,6 +438,9 @@
       await loadCloud();
       if (result.projectId) {
         const copy = await api.cloudDownload(result.projectId);
+        if (accountDialog.open) accountDialog.close();
+        await api.showEditor();
+        await api.openProject(copy.path);
         feedback('#account-feedback', `Đã tham gia và mở project ${copy.name}.`);
       }
     });
@@ -643,15 +716,15 @@
     presenceButton.classList.toggle('error', ['error', 'revoked'].includes(collaboration.connection));
     const people = collaboration.participants || [];
     $('#presence-label').textContent = collaboration.connection === 'connecting'
-      ? 'Đang nối…'
+      ? 'Connecting…'
       : collaboration.connection === 'revoked'
-        ? 'Mất quyền'
+        ? 'Revoked'
         : collaboration.connection === 'online'
           ? `${people.length} online`
-          : 'Mất kết nối';
+          : 'Disconnected';
     presenceButton.title = collaboration.error || (people.length
       ? people.map((person) => `${person.name} (${person.role})`).join('\n')
-      : 'Chưa có thành viên online');
+      : 'No collaborators online');
     if (!visible) presenceButton.setAttribute('aria-expanded', 'false');
     if (next.auth) renderAuth(next.auth);
   }

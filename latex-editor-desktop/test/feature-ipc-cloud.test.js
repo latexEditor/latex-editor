@@ -18,7 +18,7 @@ function setup(upload, options = {}) {
       restore: options.restore || (async () => ({ hash: 'b'.repeat(40), backup: 'c'.repeat(40) }))
     },
     auth: options.auth || { status: () => ({ signedIn: true, user: { id: 'owner', email: 'owner@example.test' } }), logout: options.logout || (async () => ({ signedIn: false })) },
-    cloud: { upload, deleteProject: options.deleteProject, deleteProjectById: options.deleteProjectById },
+    cloud: { upload, download: options.download, deleteProject: options.deleteProject, deleteProjectById: options.deleteProjectById },
     collaboration: options.collaboration,
     openProject: options.openProject || (async () => {})
   });
@@ -27,6 +27,7 @@ function setup(upload, options = {}) {
     restore: (...args) => handlers.get('latex:history-restore')(event, ...args),
     deleteProject: (...args) => handlers.get('latex:cloud-delete-project')(event, ...args),
     deleteById: (...args) => handlers.get('latex:cloud-delete-by-id')(event, ...args),
+    download: (...args) => handlers.get('latex:cloud-download')(event, ...args),
     logout: (...args) => handlers.get('latex:auth-logout')(event, ...args)
   };
 }
@@ -41,6 +42,18 @@ test('saving a version automatically uploads the project bundle to cloud', async
   assert.deepEqual(uploaded, ['D:\\projects\\paper']);
   assert.equal(result.cloudSynced, true);
   assert.equal(result.cloudProject.id, 'project-id');
+});
+
+test('downloading a cloud copy does not open it while a renderer modal may still be active', async () => {
+  let opened = false;
+  const { download } = setup(async () => ({}), {
+    download: async (id) => ({ id, name: 'Cloud copy', path: 'D:\\projects\\cloud-copy' }),
+    openProject: async () => { opened = true; }
+  });
+
+  const result = await download('cloud-project-id');
+  assert.equal(result.path, 'D:\\projects\\cloud-copy');
+  assert.equal(opened, false);
 });
 
 test('saving locally remains successful when automatic cloud upload fails', async () => {

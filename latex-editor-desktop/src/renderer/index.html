@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https:;">
   <title>LaTeX Editor</title>
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -16,27 +16,36 @@
 
     <div class="divider"></div>
 
-    <div id="project-tabs" class="project-tabs" aria-label="Các project đang mở"></div>
+    <div id="project-tabs" class="project-tabs" aria-label="Open projects"></div>
 
-    <button id="open-project" class="toolbar-button"><span>⌁</span> Mở thư mục</button>
-    <button id="new-project" class="toolbar-button primary"><span>＋</span> Project mới</button>
-    <button id="recent-projects" class="toolbar-button" title="Mở lại project gần đây">Gần đây</button>
-    <button id="history-button" class="toolbar-button feature-button" title="Lịch sử phiên bản" aria-label="Lịch sử phiên bản" disabled><span>↶</span><span class="feature-label">Lịch sử</span></button>
-    <button id="share-button" class="toolbar-button feature-button" title="Chia sẻ và thành viên" aria-label="Chia sẻ và thành viên" disabled><span>👥</span><span class="feature-label">Chia sẻ</span></button>
+    <button id="open-project" class="toolbar-button" title="Open folder (LaTeX project)">Open Folder</button>
+    <button id="new-project" class="toolbar-button" title="Create new project">New Project</button>
+    <button id="recent-projects" class="toolbar-button" title="Open recent project">Recent</button>
+    <button id="history-button" class="toolbar-button feature-button" title="Version history" aria-label="Version history" disabled><span class="feature-label">History</span></button>
+    <button id="share-button" class="toolbar-button feature-button" title="Share &amp; Collaboration" aria-label="Share &amp; Collaboration" disabled><span class="feature-label">Share</span></button>
 
     <div class="spacer"></div>
     <div id="presence-wrap" class="presence-wrap" hidden>
-      <button id="presence-status" class="toolbar-button presence-status" title="Thành viên đang online" aria-haspopup="true" aria-expanded="false"><span class="presence-pulse"></span><span id="presence-label">0 online</span></button>
+      <button id="presence-status" class="toolbar-button presence-status" title="Active collaborators" aria-haspopup="true" aria-expanded="false"><span class="presence-pulse"></span><span id="presence-label">0 online</span></button>
     </div>
-    <button id="account-button" class="toolbar-button feature-button" title="Tài khoản và đồng bộ cloud" aria-label="Tài khoản và đồng bộ cloud"><span>☁</span><span id="account-label" class="feature-label">Tài khoản</span><span id="account-badge" class="account-badge" hidden>0</span></button>
-
-    <button id="runtime-details" class="runtime-button" title="Xem trạng thái LaTeX runtime">
-      <span id="runtime-dot" class="dot checking"></span>
-      <span id="runtime-label">Kiểm tra LaTeX…</span>
+    <button id="account-button" class="toolbar-button feature-button account-button" title="Login to sync projects" aria-label="Account &amp; Cloud sync">
+      <span id="account-avatar" class="account-avatar">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="account-avatar-icon">
+          <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path>
+          <circle cx="12" cy="7" r="4"></circle>
+        </svg>
+      </span>
+      <span id="account-label" class="feature-label">Login</span>
+      <span id="account-badge" class="account-badge" hidden>0</span>
     </button>
-    <div class="status" title="Trạng thái code-server">
+
+    <button id="runtime-details" class="runtime-button" title="View LaTeX runtime status">
+      <span id="runtime-dot" class="dot checking"></span>
+      <span id="runtime-label">Checking LaTeX…</span>
+    </button>
+    <div class="status" title="Editor status">
       <span id="status-dot" class="dot checking"></span>
-      <span id="status-text">Đang kết nối…</span>
+      <span id="status-text">Connecting…</span>
     </div>
   </header>
 
@@ -134,6 +143,13 @@
 
   <dialog id="account-dialog" aria-labelledby="account-title">
     <h2 id="account-title">Tài khoản &amp; Cloud</h2>
+    <div id="account-profile-card" class="account-profile-card" hidden>
+      <div id="account-dialog-avatar" class="account-dialog-avatar"></div>
+      <div class="account-profile-info">
+        <strong id="account-profile-name"></strong>
+        <small id="account-profile-email"></small>
+      </div>
+    </div>
     <p id="account-description">Bạn đang dùng chế độ local.</p>
     <div class="account-actions">
       <button id="google-login" type="button" class="primary">Đăng nhập bằng Google</button>

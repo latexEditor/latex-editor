@@ -77,6 +77,8 @@ npm start
 
 Phiên đăng nhập được mã hóa bằng Electron safeStorage trong `auth-session.bin`; nếu máy không có cơ chế mã hóa phù hợp, chỉ giữ trong bộ nhớ. Token không được gửi xuống renderer. Không nhập Google client secret hoặc khóa R2 vào desktop. Một project đã liên kết cloud không tự chuyển sang tài khoản/backend khác khi đổi đăng nhập.
 
+Khi cần chẩn đoán kết nối mà không sửa dữ liệu cloud, chạy `npm run check:cloud --workspace latex-editor-desktop` từ thư mục gốc. Lệnh chỉ báo trạng thái Worker, session và khả năng đọc các API project/template; không in token đăng nhập.
+
 ## Chia sẻ project
 
 - Project mới đã được đồng bộ lên cloud trong lúc tạo; sau đó bấm **Chia sẻ** để xem thành viên và quyền hiện tại.
