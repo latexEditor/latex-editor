@@ -1,0 +1,33 @@
+name: Cloud backup
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '20 19 * * *'
+permissions:
+  contents: read
+concurrency:
+  group: latex-editor-cloud-backup
+  cancel-in-progress: false
+jobs:
+  backup:
+    if: vars.CLOUD_BACKUP_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 110
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.12.0'
+      - name: Check backup credentials
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUD_BACKUP_API_TOKEN }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo 'Add repository secret CLOUD_BACKUP_API_TOKEN before enabling scheduled backups.'
+            exit 1
+          fi
+      - name: Export D1 and copy referenced R2 objects to private backup bucket
+        run: npm --prefix latex-editor-cloud run backup -- create
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUD_BACKUP_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: a533b356d5a670c392fdc7dd9969c5c9

@@ -201,6 +201,8 @@
     $('#google-login').hidden = auth.signedIn;
     $('#google-login').disabled = !auth.configured || auth.signingIn;
     $('#account-logout').hidden = !auth.signedIn && !auth.signingIn;
+    $('#account-delete').hidden = !auth.signedIn;
+    $('#cloud-storage-usage').hidden = !auth.signedIn;
     $('#account-logout').textContent = auth.signingIn ? 'Hủy đăng nhập' : 'Đăng xuất';
     $('#cloud-section').hidden = !auth.signedIn;
     $('#cloud-upload').disabled = !state.project || cloudBusy;
@@ -227,6 +229,14 @@
     }
   }
   async function loadCloud() {
+    if (api.cloudStorage) {
+      const usage = $('#cloud-storage-usage');
+      try {
+        const data = await api.cloudStorage();
+        const mib = (bytes) => (bytes / 1048576).toLocaleString('vi-VN', { maximumFractionDigits: 1 });
+        usage.textContent = `Cloud: ${mib(data.usedBytes)} / ${mib(data.accountBytes)} MiB. Mỗi project tối đa ${mib(data.projectBytes)} MiB. Bao gồm phiên bản cũ đang chờ dọn.`;
+      } catch { usage.textContent = 'Chưa đọc được dung lượng cloud.'; }
+    }
     if (api.cloudMyInvitations) {
       try {
         const myInvites = await api.cloudMyInvitations();
@@ -417,6 +427,12 @@
   $('#cloud-upload').addEventListener('click', () => cloudAction(async () => {
     const result = await api.cloudUpload(state.project.path);
     await loadCloud(); feedback('#account-feedback', result.message);
+  }));
+  $('#account-delete')?.addEventListener('click', () => cloudAction(async () => {
+    const result = await api.deleteAccount();
+    if (result.canceled) return;
+    renderAuth(await api.authStatus());
+    feedback('#account-feedback', 'Đã thu hồi phiên đăng nhập. Dữ liệu cloud đang được xóa theo lịch; bản local vẫn được giữ.');
   }));
   $('#cloud-refresh').addEventListener('click', () => cloudAction(async () => { await loadCloud(); feedback('#account-feedback', 'Đã cập nhật danh sách.'); }));
   $('#cloud-templates-sync-all')?.addEventListener('click', () => cloudAction(async () => {

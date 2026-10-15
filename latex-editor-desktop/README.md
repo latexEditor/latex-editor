@@ -73,7 +73,8 @@ npm start
 - Project mới được tải lên cloud ngay khi tạo. Mỗi lần bấm **Lưu phiên bản** hoặc khôi phục lịch sử, app tự tải toàn bộ source và lịch sử dưới dạng Git bundle lên R2. Nút **Đồng bộ project đang mở** dùng để thử lại khi mạng/R2 từng bị lỗi hoặc để chụp nhanh nội dung đã Ctrl+S mà chưa lưu phiên bản.
 - **Tải bản sao** tạo thư mục mới kèm lịch sử; không ghi đè project đang có. Bản sao có thể được chỉnh sửa rồi đồng bộ tiếp.
 - Nếu cloud đã đổi từ máy khác, app báo xung đột. Tải bản sao cloud, đối chiếu/chuyển thay đổi cần giữ sang bản mới rồi tải lên từ bản đó. Chưa có merge tự động hay branch UI.
-- Đăng xuất giữ nguyên project/lịch sử local, xóa phiên trên máy và yêu cầu server thu hồi token. Nếu offline, app cảnh báo chưa thu hồi được token server. Phiên có hạn 7 ngày.
+- Đăng xuất giữ nguyên project/lịch sử local, xóa phiên trên máy và yêu cầu server thu hồi token. Nếu offline, app cảnh báo chưa thu hồi được token server. Phiên có hạn 7 ngày; Worker mới hỗ trợ gia hạn khi còn dưới 24 giờ, tối đa 30 ngày từ lần đăng nhập Google.
+- Mục Tài khoản & Cloud có dung lượng sử dụng và nút Xóa tài khoản. Server phải được [nâng cấp vận hành](../latex-editor-cloud/OPERATIONS.md) trước khi dùng các chức năng này. Xóa tài khoản thu hồi mọi phiên, dọn dữ liệu cloud theo lịch, giữ bản local; project có owner khác không bị xóa.
 
 Phiên đăng nhập được mã hóa bằng Electron safeStorage trong `auth-session.bin`; nếu máy không có cơ chế mã hóa phù hợp, chỉ giữ trong bộ nhớ. Token không được gửi xuống renderer. Không nhập Google client secret hoặc khóa R2 vào desktop. Một project đã liên kết cloud không tự chuyển sang tài khoản/backend khác khi đổi đăng nhập.
 

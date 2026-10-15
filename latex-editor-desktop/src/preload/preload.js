@@ -28,6 +28,8 @@ contextBridge.exposeInMainWorld('latexEditor', {
   authStatus: () => ipcRenderer.invoke('latex:auth-status'),
   login: () => ipcRenderer.invoke('latex:auth-login'),
   logout: () => ipcRenderer.invoke('latex:auth-logout'),
+  deleteAccount: () => ipcRenderer.invoke('latex:auth-delete-account'),
+  cloudStorage: () => ipcRenderer.invoke('latex:cloud-storage'),
   cloudList: () => ipcRenderer.invoke('latex:cloud-list'),
   cloudUpload: (project) => ipcRenderer.invoke('latex:cloud-upload', project),
   cloudDownload: (id) => ipcRenderer.invoke('latex:cloud-download', id),

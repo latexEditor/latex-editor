@@ -47,6 +47,25 @@ function registerFeatureIpc({ ipcMain, dialog, workspace, history, auth, cloud, 
     },
     'latex:auth-status': () => auth.status(),
     'latex:auth-login': () => auth.login(),
+    'latex:cloud-storage': async () => (await auth.request('/v1/me/storage')).json(),
+    'latex:auth-delete-account': async (event) => {
+      const user = auth.status().user;
+      if (!user) throw new Error('Hãy đăng nhập trước.');
+      const confirmation = await dialog.showMessageBox(owner(event), {
+        type: 'warning', title: 'Xóa tài khoản LaTeX Editor',
+        message: `Xóa tài khoản ${user.email}?`,
+        detail: 'Tất cả phiên đăng nhập sẽ bị thu hồi. Project mà bạn là chủ sở hữu duy nhất (kể cả project đã chia sẻ), template và dữ liệu cloud của bạn sẽ được xóa. Project có chủ sở hữu khác được giữ lại. Bản local trên các máy vẫn còn. Backup vận hành được lưu riêng và không bị xóa ngay cùng tài khoản. Không thể hoàn tác.',
+        buttons: ['Hủy', 'Xóa tài khoản'], defaultId: 0, cancelId: 0, noLink: true
+      });
+      if (confirmation.response !== 1) return { canceled: true };
+      const response = await auth.request('/v1/me', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ confirm: 'DELETE', email: user.email }) });
+      const result = await response.json();
+      await auth.logout(false);
+      workspace.clearSessionState?.();
+      collaboration?.close();
+      await openProject?.(null);
+      return { ...result, canceled: false };
+    },
     'latex:auth-logout': async () => {
       const result = await auth.logout();
       if (workspace?.clearSessionState) workspace.clearSessionState();

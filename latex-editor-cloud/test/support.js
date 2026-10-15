@@ -6,7 +6,7 @@ export class MemoryR2 {
     if (options.onlyIf?.etagDoesNotMatch === '*' && previous) return null;
     const data = typeof body === 'string' ? new TextEncoder().encode(body) : new Uint8Array(body);
     const etag = String(++this.sequence);
-    this.items.set(key, { data, etag });
+    this.items.set(key, { data, etag, uploaded: new Date() });
     return { key, etag, httpEtag: `"${etag}"`, size: data.length };
   }
   async get(key) {
@@ -14,11 +14,15 @@ export class MemoryR2 {
     if (!item) return null;
     return { key, etag: item.etag, httpEtag: `"${item.etag}"`, size: item.data.length, body: new Blob([item.data]).stream(), json: async () => JSON.parse(new TextDecoder().decode(item.data)) };
   }
-  async delete(key) { this.items.delete(key); }
-  async list({ prefix, limit = 100, cursor }) {
+  async delete(key) { for (const item of Array.isArray(key) ? key : [key]) this.items.delete(item); }
+  async head(key) {
+    const item = this.items.get(key);
+    return item ? { key, size: item.data.length, etag: item.etag, uploaded: item.uploaded } : null;
+  }
+  async list({ prefix = '', limit = 100, cursor }) {
     const all = [...this.items.keys()].filter((key) => key.startsWith(prefix)).sort();
     const offset = Number(cursor || 0);
-    const objects = all.slice(offset, offset + limit).map((key) => ({ key }));
+    const objects = all.slice(offset, offset + limit).map((key) => ({ key, size: this.items.get(key).data.length, uploaded: this.items.get(key).uploaded }));
     return { objects, truncated: offset + limit < all.length, cursor: String(offset + limit) };
   }
 }
@@ -53,7 +57,8 @@ export class MemoryD1 {
       projects: [],
       project_members: [],
       invitations: [],
-      user_templates: []
+      user_templates: [],
+      account_deletions: [], cloud_storage: [], cloud_maintenance: []
     };
   }
 
@@ -81,6 +86,17 @@ class MemoryD1Statement {
   async all() {
     const sql = this.sql.trim();
     const p = this.params;
+    if (sql.startsWith('INSERT INTO cloud_storage') && sql.includes('SELECT ?, ?, ?, ?, ? WHERE')) {
+      const [key, user_id, project_id, bytes, created_at, , , , accountLimit, , , , projectLimit] = p;
+      const total = this.db.tables.cloud_storage.filter((r) => r.user_id === user_id).reduce((n, r) => n + r.bytes, 0);
+      const projectTotal = this.db.tables.cloud_storage.filter((r) => r.project_id === project_id).reduce((n, r) => n + r.bytes, 0);
+      if (this.db.tables.account_deletions.some((r) => r.user_id === user_id) || total + bytes > accountLimit || (project_id && projectTotal + bytes > projectLimit)) return { changes: 0 };
+      this.db.tables.cloud_storage.push({ key, user_id, project_id, bytes, created_at });
+      return { changes: 1 };
+    }
+    if (sql.startsWith('SELECT COALESCE(SUM(bytes), 0) AS bytes')) {
+      return { results: [{ bytes: this.db.tables.cloud_storage.filter((r) => r.user_id === p[0]).reduce((n, r) => n + r.bytes, 0) }] };
+    }
 
     // --- INSERT ---
     if (/^INSERT\s+INTO/i.test(sql)) return this._insert(sql, p);
