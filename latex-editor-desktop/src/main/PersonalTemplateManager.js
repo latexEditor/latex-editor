@@ -10,6 +10,20 @@ const MAX_TOTAL_BYTES = 50 * 1024 * 1024;
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const EXCLUDED_DIRS = new Set(['.git', '.latex-editor', '.vscode', 'build', 'node_modules']);
 const SECRET_FILE = /^(?:\.env(?:\..*)?|.*\.(?:pem|key|p12))$/i;
+const MAX_PREVIEW_BYTES = 2 * 1024 * 1024;
+
+function validatePreviewPng(bytes) {
+  if (!Buffer.isBuffer(bytes) || bytes.length < 57 || bytes.length > MAX_PREVIEW_BYTES
+    || !bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+    || bytes.toString('ascii', 12, 16) !== 'IHDR' || bytes.readUInt32BE(8) !== 13
+    || bytes.toString('ascii', bytes.length - 8, bytes.length - 4) !== 'IEND') {
+    throw new Error('Ảnh xem trước phải là PNG hợp lệ, tối đa 2 MiB.');
+  }
+  const width = bytes.readUInt32BE(16);
+  const height = bytes.readUInt32BE(20);
+  if (!width || !height || width > 4096 || height > 4096) throw new Error('Ảnh xem trước tối đa 4096 × 4096 pixel.');
+  return bytes;
+}
 
 function buildZip(files) {
   const localHeaders = [];
@@ -118,6 +132,38 @@ class PersonalTemplateManager {
     return { deleted: true, templateId };
   }
 
+  updateMetadata(templateId, changes) {
+    const target = this.resolve(templateId);
+    if (!target) throw new Error('Không tìm thấy template cá nhân.');
+    if (!changes || typeof changes !== 'object' || Array.isArray(changes)
+      || Object.keys(changes).some((key) => !['name', 'description', 'language', 'engine', 'previewDataUrl'].includes(key))) {
+      throw new Error('Thông tin template không hợp lệ.');
+    }
+    const old = JSON.parse(this.fs.readFileSync(path.join(target, 'template.json'), 'utf8'));
+    const name = this.#cleanName(changes.name ?? old.name);
+    const description = this.#cleanText(changes.description ?? old.description ?? '', 500);
+    const language = this.#cleanText(changes.language ?? old.language ?? 'Tùy chỉnh', 80) || 'Tùy chỉnh';
+    const engine = changes.engine ?? old.engine ?? 'pdflatex';
+    if (!['pdflatex', 'xelatex'].includes(engine)) throw new Error('Compiler của template không hợp lệ.');
+    let preview;
+    if (changes.previewDataUrl !== undefined && changes.previewDataUrl !== null) {
+      const value = changes.previewDataUrl;
+      if (typeof value !== 'string' || value.length > MAX_PREVIEW_BYTES * 1.4 || !/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/.test(value)) {
+        throw new Error('Ảnh xem trước không hợp lệ.');
+      }
+      preview = validatePreviewPng(Buffer.from(value.slice('data:image/png;base64,'.length), 'base64'));
+    }
+    const staged = path.join(this.directory, `.import-edit-${randomUUID()}`);
+    try {
+      this.#copySafe(target, staged);
+      if (preview) this.fs.writeFileSync(path.join(staged, 'preview.png'), preview);
+      else if (changes.previewDataUrl === null) this.fs.rmSync(path.join(staged, 'preview.png'), { force: true });
+      this.#writeMetadata(staged, name, engine, description, { id: templateId, language });
+      this.#replace(staged, target);
+      return this.list().find((template) => template.id === templateId);
+    } finally { this.#removeOwned(staged); }
+  }
+
   exportZipBuffer(templateId) {
     const target = this.resolve(templateId);
     if (!target) throw new Error('Không tìm thấy template.');
@@ -185,28 +231,37 @@ class PersonalTemplateManager {
   }
 
   importZip(zipPath, name, targetId = null) {
+    if (targetId !== null && !/^personal-[0-9a-f-]{36}$/i.test(targetId)) throw new Error('Mã template không hợp lệ.');
     const archive = path.resolve(zipPath);
     if (!/\.zip$/i.test(archive) || !this.fs.statSync(archive).isFile()) throw new Error('Hãy chọn một file ZIP hợp lệ.');
     if (this.fs.statSync(archive).size > MAX_TOTAL_BYTES) throw new Error('ZIP vượt quá giới hạn 50 MiB.');
     this.initialize();
     const temporary = path.join(this.directory, `.import-${randomUUID()}`);
     let destination = null;
+    let ready = null;
     this.fs.mkdirSync(temporary, { recursive: false });
     return this.#extract(archive, temporary).then(() => {
       const source = this.#sourceRoot(temporary);
-      const templateName = this.#cleanName(name || path.basename(archive, path.extname(archive)));
-      destination = path.join(this.directory, targetId || `personal-${randomUUID()}`);
-      if (targetId && this.fs.existsSync(destination)) {
-        this.#removeOwned(destination);
+      let embedded = {};
+      const metadataFile = path.join(source, 'template.json');
+      if (this.fs.existsSync(metadataFile)) {
+        if (this.fs.statSync(metadataFile).size > 16384) throw new Error('Metadata template vượt giới hạn.');
+        embedded = JSON.parse(this.fs.readFileSync(metadataFile, 'utf8'));
       }
-      this.#copySafe(source, destination);
-      const engine = this.#detectEngine(destination);
-      this.#writeMetadata(destination, templateName, engine, 'Mẫu cá nhân được nhập từ ZIP.');
+      const templateName = this.#cleanName(name || embedded.name || path.basename(archive, path.extname(archive)));
+      destination = path.join(this.directory, targetId || `personal-${randomUUID()}`);
+      ready = path.join(this.directory, `.import-ready-${randomUUID()}`);
+      this.#copySafe(source, ready);
+      const engine = ['pdflatex', 'xelatex'].includes(embedded.engine) ? embedded.engine : this.#detectEngine(ready);
+      this.#writeMetadata(ready, templateName, engine,
+        this.#cleanText(embedded.description ?? 'Mẫu cá nhân được nhập từ ZIP.', 500),
+        { id: path.basename(destination), language: this.#cleanText(embedded.language ?? 'Tùy chỉnh', 80) || 'Tùy chỉnh' });
+      this.#replace(ready, destination);
       this.#removeOwned(temporary);
       return this.list().find((template) => template.id === path.basename(destination));
     }).catch((error) => {
       this.#removeOwned(temporary);
-      if (destination) this.#removeOwned(destination);
+      if (ready) this.#removeOwned(ready);
       throw error;
     });
   }
@@ -217,8 +272,29 @@ class PersonalTemplateManager {
     return name;
   }
 
-  #writeMetadata(directory, name, engine, description) {
-    const metadata = { id: path.basename(directory), name, engine, language: 'Tùy chỉnh', description };
+  #cleanText(value, limit) {
+    if (typeof value !== 'string' || value.length > limit) throw new Error(`Thông tin template phải là văn bản tối đa ${limit} ký tự.`);
+    return value.trim().replace(/[\x00-\x08\x0b-\x1f]/g, '');
+  }
+
+  #replace(staged, destination) {
+    const backup = path.join(this.directory, `.import-backup-${randomUUID()}`);
+    const existed = this.fs.existsSync(destination);
+    if (existed) this.fs.renameSync(destination, backup);
+    try { this.fs.renameSync(staged, destination); }
+    catch (error) {
+      if (existed) this.fs.renameSync(backup, destination);
+      throw error;
+    }
+    if (existed) {
+      // Publishing succeeded. A transient antivirus lock on the old directory
+      // must not turn a successful update into a misleading failure.
+      try { this.#removeOwned(backup); } catch {}
+    }
+  }
+
+  #writeMetadata(directory, name, engine, description, extra = {}) {
+    const metadata = { id: extra.id || path.basename(directory), name, engine, language: extra.language || 'Tùy chỉnh', description };
     this.fs.writeFileSync(path.join(directory, 'template.json'), `${JSON.stringify(metadata, null, 2)}\n`, 'utf8');
   }
 
@@ -338,8 +414,8 @@ class PersonalTemplateManager {
   #removeOwned(target) {
     const resolved = path.resolve(target);
     if (path.dirname(resolved) !== this.directory || !/^(?:\.import-|personal-)/.test(path.basename(resolved))) return;
-    this.fs.rmSync(resolved, { recursive: true, force: true });
+    this.fs.rmSync(resolved, { recursive: true, force: true, maxRetries: 3, retryDelay: 30 });
   }
 }
 
-module.exports = { PersonalTemplateManager };
+module.exports = { PersonalTemplateManager, validatePreviewPng };

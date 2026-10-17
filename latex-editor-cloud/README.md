@@ -4,6 +4,11 @@ Backend Cloudflare Worker cho đăng nhập Google và lưu project + lịch s�
 
 Worker production đã được deploy với Google OAuth, D1 và R2. Test tự động vẫn dùng Google/D1/R2/email giả lập để không thay đổi dữ liệu production; luồng chia sẻ cần được nghiệm thu thêm bằng hai tài khoản Google thật.
 
+Phần quota, dọn R2 theo lịch, gia hạn phiên và xóa tài khoản đã có trong code mới;
+cần áp migration trước deploy. Xem [hướng dẫn vận hành](OPERATIONS.md) để biết
+cách nâng cấp và các bước còn thiếu cho backup tự động. Bộ test vận hành riêng
+dùng SQLite thật qua Node 22, không dùng dữ liệu production.
+
 ## 1. Công cụ và tài nguyên
 
 Desktop tiếp tục dùng Node 20.19.5. Wrangler 4.120.0 cần Node 22 trở lên; không cần đổi Node của desktop. Trong thư mục `latex-editor-cloud`, có thể dùng Wrangler với Node 22 biệt lập qua npm:
@@ -98,7 +103,9 @@ Không dùng `workers.dev` làm domain người gửi. Nếu binding hoặc `EMA
   - Quản lý phiên WebSocket, tự phục hồi presence từ WebSocket attachment khi hibernating/khởi động lại.
 - **Giới hạn hiện tại**:
   - Đã có: Cộng tác thời gian thực Yjs, đồng bộ file manifest, phân quyền server, xóa project cloud an toàn (xóa Durable Object room, thu hồi bundle R2 và D1 cascade delete), đồng bộ template cá nhân qua R2/D1.
-  - Chưa có: Quota dung lượng theo tài khoản/project, garbage collection cho bundle R2 cũ mồ côi khi ghi đè nhiều lần, API xóa tài khoản người dùng, backup định kỳ R2/D1, refresh token dài hạn, auto-merge snapshot.
+  - Vận hành mới (cần migration/deploy): quota 1 GiB/tài khoản và 500 MiB/project, cron GC, API xóa tài khoản, gia hạn session giới hạn 30 ngày, Logs/Traces.
+  - Backup: script D1/R2 sang bucket private `latex-editor-backups`, checksum/restore local và workflow hằng ngày; lịch CI cần cấu hình secret và bật riêng theo [OPERATIONS.md](OPERATIONS.md).
+  - Chưa có: backup draft Durable Objects, auto-merge snapshot, dashboard/cảnh báo chi phí riêng.
   - Giới hạn bundle: 50 MiB, tối đa 5.000 file/snapshot.
 
 ## API hiện có

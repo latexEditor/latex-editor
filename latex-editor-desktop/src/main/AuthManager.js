@@ -35,6 +35,8 @@ class AuthManager {
     this.generation = 0;
     this.controller = new AbortController();
     this.storageQueue = Promise.resolve();
+    this.refreshing = null;
+    this.nextRefreshAt = 0;
   }
 
   storageTask(task) {
@@ -92,6 +94,9 @@ class AuthManager {
 
   async request(route, options = {}) {
     if (!this.status().signedIn) throw new Error('Hãy đăng nhập để đồng bộ project.');
+    if (route !== '/auth/refresh' && Date.now() >= this.nextRefreshAt && this.session.expiresAt - Date.now() < 86400000) {
+      await this.refreshSession();
+    }
     const generation = this.generation;
     const response = await this.fetch(this.apiUrl + route, {
       ...options, redirect: 'error',
@@ -110,6 +115,31 @@ class AuthManager {
       throw error;
     }
     return response;
+  }
+
+  async refreshSession() {
+    if (this.refreshing) return this.refreshing;
+    this.nextRefreshAt = Date.now() + 3600000;
+    const generation = this.generation;
+    const previous = this.session;
+    const task = (async () => {
+      try {
+        const response = await this.request('/auth/refresh', { method: 'POST' });
+        const result = await response.json();
+        if (generation !== this.generation || previous !== this.session) throw new Error('Phiên đăng nhập đã thay đổi.');
+        if (!(result.expiresAt > Date.now())) throw new Error('Dữ liệu gia hạn phiên không hợp lệ.');
+        const session = { ...previous, expiresAt: result.expiresAt, user: result.user || previous.user };
+        await this.persist(session, generation);
+        if (generation !== this.generation || previous !== this.session) throw new Error('Phiên đăng nhập đã thay đổi.');
+        this.session = session;
+      } catch (error) {
+        // A failed optional renewal must not break a still-valid session, e.g.
+        // an older Worker or a transient network outage. 401 clears it above.
+        if (generation !== this.generation || !this.status().signedIn) throw error;
+      }
+    })();
+    this.refreshing = task;
+    try { await task; } finally { if (this.refreshing === task) this.refreshing = null; }
   }
 
   async login() {
@@ -189,6 +219,8 @@ class AuthManager {
     this.controller.abort();
     this.controller = new AbortController();
     this.session = null;
+    this.refreshing = null;
+    this.nextRefreshAt = 0;
     this.pending?.cancel();
     this.onChange();
     await this.storageTask(() => fs.rm(this.sessionFile, { force: true }));

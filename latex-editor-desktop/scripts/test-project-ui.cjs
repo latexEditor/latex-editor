@@ -150,6 +150,34 @@ async function run() {
     category.value = '';
     category.dispatchEvent(new Event('change'));
   });
+  async function testTemplateEditing() {
+  const personalBeforeEdit = manager.personalTemplates.list()[0];
+  await click('.template-edit-button');
+  await waitForPage(() => document.querySelector('#template-edit-dialog').open, 'template editor');
+  assert.equal(await evaluate(() => document.querySelector('#template-edit-save-cloud').disabled), true);
+  await evaluate(() => { document.querySelector('#template-edit-name').value = 'Discarded name'; });
+  await click('#template-edit-close');
+  assert.equal(manager.personalTemplates.list()[0].name, personalBeforeEdit.name, 'cancel preserves metadata');
+  await click('.template-edit-button');
+  await waitForPage(() => document.querySelector('#template-edit-dialog').open, 'reopen template editor');
+  await click('#template-edit-remove-image');
+  const originalPicker = dialog.showOpenDialog;
+  dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path.resolve(__dirname, '../resources/templates/report/preview.png')] });
+  await click('#template-edit-choose-image');
+  await waitForPage(() => !document.querySelector('#template-edit-image').hidden && document.querySelector('#template-edit-image').naturalWidth > 0, 'chosen template preview');
+  dialog.showOpenDialog = originalPicker;
+  await evaluate(() => {
+    document.querySelector('#template-edit-name').value = 'Edited personal template';
+    document.querySelector('#template-edit-description').value = 'Updated preview and metadata';
+    document.querySelector('#template-edit-engine').value = 'xelatex';
+    document.querySelector('#template-edit-form').requestSubmit(document.querySelector('#template-edit-save'));
+  });
+  await waitForPage(() => document.querySelector('#template-edit-feedback').textContent.includes('Đã lưu thay đổi'), 'template saved');
+  assert.equal(manager.personalTemplates.list()[0].name, 'Edited personal template');
+  assert.equal(manager.personalTemplates.list()[0].engine, 'xelatex');
+  assert.equal(manager.personalTemplates.list()[0].id, personalBeforeEdit.id);
+  await click('#template-edit-close');
+  }
   await evaluate(() => {
     document.querySelector('#new-project-name').value = 'Báo cáo thử nghiệm';
     document.querySelector('input[value="report"]').checked = true;
@@ -363,6 +391,7 @@ async function run() {
   await waitForPage(() => document.querySelectorAll('.template-option').length === 8, 'saved personal template');
   assert.equal(await evaluate(() => Boolean(document.querySelector('input[value^="personal-"]:checked'))), true);
   assert.equal(await evaluate(() => document.querySelector('input[value^="personal-"]').closest('label').querySelector('.template-preview img').src.startsWith('data:image/png;base64,')), true);
+  await testTemplateEditing();
   await evaluate(() => {
     document.querySelector('#new-project-name').value = 'Báo cáo thử nghiệm';
     document.querySelector('#new-project-form').requestSubmit();

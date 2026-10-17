@@ -51,19 +51,24 @@
 
 ## Đợt 5 — Cloud, Vận hành và Thư viện mẫu
 
-- [ ] Quota dung lượng lưu trữ theo tài khoản và theo project.
-- [ ] Garbage collection cho các Git bundle R2 cũ không còn manifest tham chiếu.
+- [x] Quota dung lượng theo tài khoản/project, reservation nguyên tử D1, API và UI xem dung lượng (cần áp migration vận hành trước deploy).
+- [x] Cron GC có cursor, thời gian chờ 24 giờ, kiểm tra tham chiếu D1 và thu hồi reservation mồ côi.
 - [x] Chức năng xóa project cloud (Durable Object cleanup, R2 bundle purge, D1 cascade delete, confirmation dialog trên Desktop).
-- [ ] Chức năng xóa tài khoản người dùng và thu hồi toàn bộ dữ liệu liên quan.
-- [ ] Sao lưu tự động định kỳ cho R2 và D1 database.
-- [ ] Refresh token / gia hạn session dài hạn an toàn.
+- [x] Xóa tài khoản: hộp thoại xác nhận, thu hồi session, marker bền vững và cleanup theo batch; giữ project có owner khác.
+- [x] Script backup D1/R2 sang bucket private riêng, SHA-256, manifest hoàn tất, verify/restore local và workflow hằng ngày.
+  - Lịch CI cần secret `CLOUD_BACKUP_API_TOKEN`, variable bật lịch và workflow trên default branch; chưa bật retention tự xóa.
+- [x] Gia hạn session tối đa 7 ngày/lượt, giới hạn tuyệt đối 30 ngày từ Google login; desktop tự gia hạn và chống phục hồi phiên sau logout.
 - [ ] Load-test bundle gần giới hạn 50 MiB trên Worker production.
 - [ ] Dashboard giám sát lỗi, dung lượng, chi phí và cảnh báo.
+  - Đã bật Workers Logs/Traces, log JSON cho maintenance và retry; chưa có dashboard/cảnh báo riêng.
 - [ ] Cơ chế giải quyết xung đột (conflict resolution / branch UI) khi snapshot cloud có thay đổi đồng thời.
 - [x] Đồng bộ template cá nhân lên Cloudflare R2 để dùng xuyên suốt nhiều máy (đóng gói ZIP bằng zlib Node.js, REST API trên Worker, lưu R2 & D1, đồng bộ hai chiều trên desktop).
 - [ ] Thư viện mẫu cộng đồng (Community templates) tải từ cloud.
-- [ ] Giao diện chỉnh sửa metadata và ảnh xem trước của template cá nhân.
+- [x] Giao diện chỉnh sửa metadata và ảnh xem trước của template cá nhân; lưu cục bộ hoặc lưu và đồng bộ cloud, giữ nguyên ID và nội dung tài liệu.
 - [ ] Onboard domain Email Sending thật cho Cloudflare Worker khi chuyển sang plan phù hợp.
+
+Chi tiết migration, quota, giới hạn GC và trạng thái backup: [Cloud Operations](../../latex-editor-cloud/OPERATIONS.md).
+Các mục vận hành đánh dấu hoàn tất ở trên là phần triển khai trong code; cần migration/deploy và nghiệm thu production trước khi phát hành.
 
 ## Đợt 6 — Web Client và Build LaTeX từ xa
 

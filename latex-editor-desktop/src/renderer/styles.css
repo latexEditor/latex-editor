@@ -622,8 +622,15 @@ dialog .feature-note { font-size: 12px; margin-bottom: 14px; }
   margin: 0; font-size: 14px; font-weight: 600; color: #1e293b;
 }
 .template-option-actions {
-  display: flex; align-items: center; gap: 6px; margin-top: 6px;
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 6px;
 }
+.template-edit-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+#template-edit-dialog { width: min(560px, calc(100vw - 48px)); max-height: calc(100vh - 64px); overflow-y: auto; }
+#template-edit-dialog input, #template-edit-dialog select, #template-edit-dialog textarea { box-sizing: border-box; width: 100%; }
+#template-edit-dialog textarea { resize: vertical; font: inherit; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; }
+.template-edit-preview { display: flex; align-items: center; justify-content: center; height: 210px; margin-top: 14px; border: 1px solid #e2e8f0; background: #f8fafc; border-radius: 8px; }
+.template-edit-preview img { max-width: 100%; max-height: 100%; object-fit: contain; }
+#template-edit-placeholder { color: #64748b; font-size: 13px; }
 .template-option-actions button {
   padding: 3px 8px; font-size: 11px;
 }

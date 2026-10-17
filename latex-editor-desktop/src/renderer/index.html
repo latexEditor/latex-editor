@@ -99,6 +99,25 @@
     </form>
   </dialog>
 
+  <dialog id="template-edit-dialog" aria-labelledby="template-edit-title">
+    <form id="template-edit-form">
+      <h2 id="template-edit-title">Chỉnh sửa template cá nhân</h2>
+      <label for="template-edit-name">Tên mẫu</label>
+      <input id="template-edit-name" maxlength="100" required autocomplete="off">
+      <label for="template-edit-description">Mô tả</label>
+      <textarea id="template-edit-description" maxlength="500" rows="3"></textarea>
+      <div class="template-edit-fields">
+        <div><label for="template-edit-language">Ngôn ngữ</label><input id="template-edit-language" maxlength="80" autocomplete="off"></div>
+        <div><label for="template-edit-engine">Compiler</label><select id="template-edit-engine"><option value="pdflatex">pdfLaTeX</option><option value="xelatex">XeLaTeX</option></select></div>
+      </div>
+      <div class="template-edit-preview"><img id="template-edit-image" alt="Ảnh xem trước template" hidden><span id="template-edit-placeholder">Chưa có ảnh xem trước</span></div>
+      <p class="feature-note">Ảnh PNG tối đa 2 MiB, kích thước tối đa 4096 × 4096 pixel.</p>
+      <div class="account-actions"><button id="template-edit-choose-image" type="button">Chọn ảnh PNG</button><button id="template-edit-remove-image" type="button">Bỏ ảnh</button></div>
+      <p id="template-edit-feedback" class="feature-feedback" role="status"></p>
+      <div class="dialog-actions"><button id="template-edit-close" type="button">Đóng</button><button id="template-edit-save-cloud" type="submit" value="cloud">Lưu và đồng bộ</button><button id="template-edit-save" type="submit" class="primary">Lưu trên máy</button></div>
+    </form>
+  </dialog>
+
   <dialog id="recent-dialog" aria-labelledby="recent-title">
     <h2 id="recent-title">Project gần đây</h2>
     <p>Mở lại project đã đóng. Bỏ khỏi lịch sử không xóa file trên máy.</p>
@@ -154,7 +173,9 @@
     <div class="account-actions">
       <button id="google-login" type="button" class="primary">Đăng nhập bằng Google</button>
       <button id="account-logout" type="button" hidden>Đăng xuất</button>
+      <button id="account-delete" type="button" class="btn-danger" hidden>Xóa tài khoản</button>
     </div>
+    <p id="cloud-storage-usage" class="feature-note" hidden></p>
     <section id="cloud-section" hidden>
       <h3>Project trên cloud</h3>
       <p class="feature-note">Đồng bộ sẽ lưu phiên bản mới từ các file trên ổ đĩa. Tải project tạo một bản sao riêng cùng toàn bộ lịch sử.</p>

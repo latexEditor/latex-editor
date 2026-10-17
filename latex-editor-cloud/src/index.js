@@ -1,3 +1,4 @@
+import { OperationsError, reserveStorage, storageUsage, requestAccountDeletion, runMaintenance } from './operations.js';
 const encoder = new TextEncoder();
 const MAX_BUNDLE = 50 * 1024 * 1024;
 const TOKEN = /^[A-Za-z0-9_-]{43}$/;
@@ -94,10 +95,11 @@ async function session(request, env) {
   if (!TOKEN.test(token || '')) throw new HttpError(401, 'Cần đăng nhập.');
   const tokenHash = await digest(token);
   const row = await env.DB.prepare(
-    'SELECT s.user_id, s.expires_at, u.id, u.email, u.name, u.avatar_url FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ?'
+    'SELECT s.user_id, s.expires_at, s.created_at, u.id, u.email, u.name, u.avatar_url FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ?'
   ).bind(tokenHash).first();
   if (!row || row.expires_at <= Date.now()) throw new HttpError(401, 'Phiên đăng nhập đã hết hạn.');
-  return { user: { id: row.user_id, email: row.email, name: row.name, avatar_url: row.avatar_url || null }, expiresAt: row.expires_at, tokenHash };
+  if (await env.DB.prepare('SELECT user_id FROM account_deletions WHERE user_id = ?').bind(row.user_id).first()) throw new HttpError(401, 'Tài khoản đang được xóa.');
+  return { user: { id: row.user_id, email: row.email, name: row.name, avatar_url: row.avatar_url || null }, expiresAt: row.expires_at, createdAt: row.created_at, tokenHash };
 }
 
 // D1 authorization — check project membership
@@ -186,6 +188,7 @@ export async function handleRequest(request, env, fetcher = fetch) {
       const { code, verifier } = await jsonBody(request);
       if (!TOKEN.test(code || '') || !TOKEN.test(verifier || '')) throw new HttpError(400, 'Mã đăng nhập không hợp lệ.');
       const login = await consume(env.PROJECTS, 'auth/code/' + await digest(code), async (value) => value.challenge === await digest(verifier));
+      if (await env.DB.prepare('SELECT user_id FROM account_deletions WHERE user_id = ?').bind(login.user.id).first()) throw new HttpError(409, 'Tài khoản đang được xóa. Hãy thử lại sau khi hoàn tất.');
       // Upsert user in D1
       await env.DB.prepare(
         'INSERT INTO users (id, email, name, avatar_url) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET email = excluded.email, name = excluded.name, avatar_url = excluded.avatar_url, updated_at = datetime(\'now\')'
@@ -210,6 +213,23 @@ export async function handleRequest(request, env, fetcher = fetch) {
     if (url.pathname === '/v1/me' && request.method === 'GET') return json({ user: current.user, expiresAt: current.expiresAt });
 
     await rateLimit(env.PROJECT_RATE_LIMITER, current.user.id);
+
+    if (url.pathname === '/auth/refresh' && request.method === 'POST') {
+      // Sliding 7-day session, capped at 30 days from Google authentication.
+      const created = Date.parse(String(current.createdAt).replace(' ', 'T').replace(/(?<!Z)$/, 'Z'));
+      if (!Number.isFinite(created)) throw new HttpError(401, 'Hãy đăng nhập Google lại để gia hạn phiên.');
+      const expiresAt = Math.min(Date.now() + 7 * 86400000, created + 30 * 86400000);
+      if (expiresAt <= Date.now()) throw new HttpError(401, 'Hãy đăng nhập Google lại.');
+      const result = await env.DB.prepare('UPDATE sessions SET expires_at = ? WHERE token_hash = ? AND expires_at > ?').bind(expiresAt, current.tokenHash, Date.now()).run();
+      if (!(result.meta?.changes ?? result.changes)) throw new HttpError(401, 'Phiên đã được thu hồi.');
+      return json({ user: current.user, expiresAt });
+    }
+    if (url.pathname === '/v1/me/storage' && request.method === 'GET') return json(await storageUsage(env, current.user.id));
+    if (url.pathname === '/v1/me' && request.method === 'DELETE') {
+      const body = await jsonBody(request);
+      if (body.confirm !== 'DELETE' || body.email !== current.user.email) throw new HttpError(400, 'Cần xác nhận email và thao tác xóa tài khoản.');
+      return json(await requestAccountDeletion(env, current.user), 202);
+    }
 
     // --- Project list (own + shared) ---
     if (url.pathname === '/v1/projects' && request.method === 'GET') {
@@ -263,7 +283,8 @@ export async function handleRequest(request, env, fetcher = fetch) {
         const data = await boundedBody(request, MAX_BUNDLE);
         if (data.length < 22 || data[0] !== 0x50 || data[1] !== 0x4b) throw new HttpError(400, 'Dữ liệu template phải là định dạng ZIP.');
 
-        const bundleKey = `templates/${current.user.id}/${templateId}.zip`;
+        const bundleKey = `templates/${current.user.id}/${templateId}/${crypto.randomUUID()}.zip`;
+        await reserveStorage(env, { key: bundleKey, userId: current.user.id, bytes: data.length });
         await env.PROJECTS.put(bundleKey, data, { httpMetadata: { contentType: 'application/zip' } });
         const now = new Date().toISOString();
 
@@ -400,6 +421,7 @@ export async function handleRequest(request, env, fetcher = fetch) {
       const existing = await env.DB.prepare('SELECT id FROM projects WHERE id = ?').bind(projectId).first();
       if (existing) throw new HttpError(409, 'Xung đột: project cloud đã thay đổi. Hãy tải bản cloud để đối chiếu.');
       const bundleKey = 'bundles/' + projectId + '/' + crypto.randomUUID() + '.bundle';
+      await reserveStorage(env, { key: bundleKey, userId: current.user.id, projectId, bytes: data.length });
       await env.PROJECTS.put(bundleKey, data, { httpMetadata: { contentType: 'application/x-git-bundle' } });
       const now = new Date().toISOString();
       await env.DB.batch([
@@ -463,6 +485,9 @@ export async function handleRequest(request, env, fetcher = fetch) {
       const header = new TextDecoder().decode(data.slice(0, 4096)).split('\n\n')[0];
       if (!header.startsWith('# v2 git bundle\n') || !header.split('\n').includes(head + ' refs/heads/main') || header.split('\n').some((line) => line.startsWith('-'))) throw new HttpError(400, 'Cần một Git bundle đầy đủ, phiên bản v2.');
       const bundleKey = 'bundles/' + projectId + '/' + crypto.randomUUID() + '.bundle';
+      const owner = await env.DB.prepare("SELECT user_id FROM project_members WHERE project_id = ? AND role = 'owner' ORDER BY joined_at LIMIT 1").bind(projectId).first();
+      if (!owner) throw new HttpError(409, 'Project không có chủ sở hữu.');
+      await reserveStorage(env, { key: bundleKey, userId: owner.user_id, projectId, bytes: data.length });
       await env.PROJECTS.put(bundleKey, data, { httpMetadata: { contentType: 'application/x-git-bundle' } });
       const now = new Date().toISOString();
       const result = await env.DB.prepare(
@@ -593,8 +618,12 @@ export async function handleRequest(request, env, fetcher = fetch) {
 
     throw new HttpError(405, 'Phương thức không được hỗ trợ.');
   } catch (error) {
-    return json({ error: error instanceof HttpError ? error.message : 'Dịch vụ chưa xử lý được yêu cầu. Hãy thử lại sau.' }, error instanceof HttpError ? error.status : 500);
+    if (!(error instanceof HttpError) && !(error instanceof OperationsError)) console.error(JSON.stringify({ event: 'request-failed', method: request.method, path: new URL(request.url).pathname, name: error.name }));
+    return json({ error: error instanceof HttpError || error instanceof OperationsError ? error.message : 'Dịch vụ chưa xử lý được yêu cầu. Hãy thử lại sau.' }, error instanceof HttpError || error instanceof OperationsError ? error.status : 500);
   }
 }
 
-export default { fetch: (request, env) => handleRequest(request, env) };
+export default {
+  fetch: (request, env) => handleRequest(request, env),
+  async scheduled(_controller, env) { await runMaintenance(env); }
+};

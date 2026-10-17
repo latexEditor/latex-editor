@@ -1,6 +1,8 @@
 const path = require('node:path');
+const fs = require('node:fs');
 const { pathToFileURL } = require('node:url');
-const { BrowserWindow } = require('electron');
+const { BrowserWindow, nativeImage } = require('electron');
+const { validatePreviewPng } = require('./PersonalTemplateManager');
 
 function registerFeatureIpc({ ipcMain, dialog, workspace, history, auth, cloud, collaboration, openProject }) {
   const shellUrl = pathToFileURL(path.resolve(__dirname, '../renderer/index.html')).toString();
@@ -47,6 +49,25 @@ function registerFeatureIpc({ ipcMain, dialog, workspace, history, auth, cloud, 
     },
     'latex:auth-status': () => auth.status(),
     'latex:auth-login': () => auth.login(),
+    'latex:cloud-storage': async () => (await auth.request('/v1/me/storage')).json(),
+    'latex:auth-delete-account': async (event) => {
+      const user = auth.status().user;
+      if (!user) throw new Error('Hãy đăng nhập trước.');
+      const confirmation = await dialog.showMessageBox(owner(event), {
+        type: 'warning', title: 'Xóa tài khoản LaTeX Editor',
+        message: `Xóa tài khoản ${user.email}?`,
+        detail: 'Tất cả phiên đăng nhập sẽ bị thu hồi. Project mà bạn là chủ sở hữu duy nhất (kể cả project đã chia sẻ), template và dữ liệu cloud của bạn sẽ được xóa. Project có chủ sở hữu khác được giữ lại. Bản local trên các máy vẫn còn. Backup vận hành được lưu riêng và không bị xóa ngay cùng tài khoản. Không thể hoàn tác.',
+        buttons: ['Hủy', 'Xóa tài khoản'], defaultId: 0, cancelId: 0, noLink: true
+      });
+      if (confirmation.response !== 1) return { canceled: true };
+      const response = await auth.request('/v1/me', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ confirm: 'DELETE', email: user.email }) });
+      const result = await response.json();
+      await auth.logout(false);
+      workspace.clearSessionState?.();
+      collaboration?.close();
+      await openProject?.(null);
+      return { ...result, canceled: false };
+    },
     'latex:auth-logout': async () => {
       const result = await auth.logout();
       if (workspace?.clearSessionState) workspace.clearSessionState();
@@ -107,6 +128,21 @@ function registerFeatureIpc({ ipcMain, dialog, workspace, history, auth, cloud, 
       return { ...result, canceled: false };
     },
     'latex:template-cloud-list': () => cloud.listCloudTemplates(),
+    'latex:template-update-local': (_event, templateId, changes) => workspace.personalTemplates.updateMetadata(templateId, changes),
+    'latex:template-choose-preview': async (event) => {
+      const result = await dialog.showOpenDialog(owner(event), {
+        title: 'Chọn ảnh xem trước template', properties: ['openFile'],
+        filters: [{ name: 'Ảnh PNG (tối đa 2 MiB)', extensions: ['png'] }]
+      });
+      if (result.canceled || !result.filePaths[0]) return null;
+      const file = result.filePaths[0];
+      const info = fs.lstatSync(file);
+      if (!info.isFile() || info.size > 2 * 1024 * 1024) throw new Error('Hãy chọn ảnh PNG tối đa 2 MiB.');
+      const bytes = validatePreviewPng(fs.readFileSync(file));
+      const image = nativeImage.createFromBuffer(bytes);
+      if (image.isEmpty()) throw new Error('Không đọc được ảnh PNG đã chọn.');
+      return `data:image/png;base64,${bytes.toString('base64')}`;
+    },
     'latex:template-cloud-upload': (_event, templateId) => cloud.uploadTemplate(templateId),
     'latex:template-cloud-download': (_event, templateId) => cloud.downloadTemplate(templateId),
     'latex:template-cloud-delete': async (event, templateId, templateName) => {

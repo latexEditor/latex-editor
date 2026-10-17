@@ -33,7 +33,8 @@ Xem thêm [docs/development.md](docs/development.md) và [docs/architecture.md](
 
 - **Project mới**: yêu cầu đăng nhập; app tạo bản làm việc local, lập phiên bản đầu tiên và tự tải toàn bộ source/lịch sử lên R2. Thư viện 7 mẫu có ảnh xem trước kết quả PDF, tìm kiếm có/không dấu và lọc theo loại tài liệu. Gồm Bài báo, Báo cáo, Slide Beamer, Tài liệu tối giản, Báo cáo tiếng Việt, Luận văn tiếng Việt và CV tiếng Việt.
 - Mỗi mẫu hiển thị ngôn ngữ và compiler. Các mẫu tiếng Việt và Slide được cấu hình sẵn XeLaTeX cùng font Latin Modern để nhập Unicode tiếng Việt; chạy hai lượt khi cần cập nhật mục lục/tham chiếu. Cấu hình XeLaTeX được giữ khi mở lại project. Với MiKTeX, recipe do app quản lý tự cài package còn thiếu mà không bật hộp thoại hỏi lại.
-- Trong hộp **Project mới**, bấm **Nhập ZIP** để thêm template hoặc **Lưu project làm mẫu** để tái sử dụng project đang mở. Template cá nhân nằm ở `%APPDATA%\LatexEditor\templates`, có thể kèm `preview.png`, và chỉ được lưu trên máy hiện tại (chưa đồng bộ R2).
+- Trong hộp **Project mới**, bấm **Nhập ZIP** để thêm template hoặc **Lưu project làm mẫu** để tái sử dụng project đang mở. Template cá nhân nằm ở `%APPDATA%\LatexEditor\templates` và có thể đồng bộ lên R2 khi đăng nhập.
+- Bấm **Chỉnh sửa** trên thẻ template cá nhân để đổi tên, mô tả, ngôn ngữ, compiler và ảnh PNG (tối đa 2 MiB, 4096 × 4096). **Lưu** chỉ lưu trên máy; **Lưu và đồng bộ** cập nhật bản cloud, giữ nguyên ID và nội dung tài liệu. Nếu upload lỗi, bản đã lưu trên máy vẫn được giữ. Trên máy khác, tải lại mẫu từ cloud để nhận thay đổi; đồng bộ thư viện không tự hợp nhất hai bản cùng ID.
 - ZIP có thể đặt `main.tex` ở gốc hoặc trong một thư mục bọc duy nhất. App giới hạn 500 file, 50 MiB tổng và 10 MiB mỗi file; từ chối đường dẫn vượt thư mục, file mã hóa/symlink, đồng thời bỏ `.git`, `.vscode`, `.latex-editor`, `build`, `node_modules`, `.env*` và khóa riêng.
 - Nếu thiếu compiler của mẫu, hộp tạo project hiển thị hướng dẫn; vẫn có thể tạo để soạn nội dung. Mẫu luận văn là cấu trúc chung, cần điều chỉnh theo yêu cầu của trường.
 - **Gần đây**: tìm theo tên/đường dẫn và mở lại tối đa 12 project gần nhất, kể cả sau khi khởi động lại app. Trang trống hiển thị 5 project gần nhất để mở nhanh.
@@ -73,7 +74,8 @@ npm start
 - Project mới được tải lên cloud ngay khi tạo. Mỗi lần bấm **Lưu phiên bản** hoặc khôi phục lịch sử, app tự tải toàn bộ source và lịch sử dưới dạng Git bundle lên R2. Nút **Đồng bộ project đang mở** dùng để thử lại khi mạng/R2 từng bị lỗi hoặc để chụp nhanh nội dung đã Ctrl+S mà chưa lưu phiên bản.
 - **Tải bản sao** tạo thư mục mới kèm lịch sử; không ghi đè project đang có. Bản sao có thể được chỉnh sửa rồi đồng bộ tiếp.
 - Nếu cloud đã đổi từ máy khác, app báo xung đột. Tải bản sao cloud, đối chiếu/chuyển thay đổi cần giữ sang bản mới rồi tải lên từ bản đó. Chưa có merge tự động hay branch UI.
-- Đăng xuất giữ nguyên project/lịch sử local, xóa phiên trên máy và yêu cầu server thu hồi token. Nếu offline, app cảnh báo chưa thu hồi được token server. Phiên có hạn 7 ngày.
+- Đăng xuất giữ nguyên project/lịch sử local, xóa phiên trên máy và yêu cầu server thu hồi token. Nếu offline, app cảnh báo chưa thu hồi được token server. Phiên có hạn 7 ngày; Worker mới hỗ trợ gia hạn khi còn dưới 24 giờ, tối đa 30 ngày từ lần đăng nhập Google.
+- Mục Tài khoản & Cloud có dung lượng sử dụng và nút Xóa tài khoản. Server phải được [nâng cấp vận hành](../latex-editor-cloud/OPERATIONS.md) trước khi dùng các chức năng này. Xóa tài khoản thu hồi mọi phiên, dọn dữ liệu cloud theo lịch, giữ bản local; project có owner khác không bị xóa.
 
 Phiên đăng nhập được mã hóa bằng Electron safeStorage trong `auth-session.bin`; nếu máy không có cơ chế mã hóa phù hợp, chỉ giữ trong bộ nhớ. Token không được gửi xuống renderer. Không nhập Google client secret hoặc khóa R2 vào desktop. Một project đã liên kết cloud không tự chuyển sang tài khoản/backend khác khi đổi đăng nhập.
 

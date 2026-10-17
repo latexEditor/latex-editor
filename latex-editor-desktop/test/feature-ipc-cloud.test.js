@@ -28,9 +28,43 @@ function setup(upload, options = {}) {
     deleteProject: (...args) => handlers.get('latex:cloud-delete-project')(event, ...args),
     deleteById: (...args) => handlers.get('latex:cloud-delete-by-id')(event, ...args),
     download: (...args) => handlers.get('latex:cloud-download')(event, ...args),
+    deleteAccount: (...args) => handlers.get('latex:auth-delete-account')(event, ...args),
     logout: (...args) => handlers.get('latex:auth-logout')(event, ...args)
   };
 }
+
+test('account deletion cancellation never sends a request or clears local state', async () => {
+  let requested = false;
+  const { deleteAccount } = setup(async () => ({}), {
+    dialog: { showMessageBox: async () => ({ response: 0 }) },
+    auth: { status: () => ({ user: { email: 'one@example.test' } }), request: async () => { requested = true; } }
+  });
+  assert.deepEqual(await deleteAccount(), { canceled: true });
+  assert.equal(requested, false);
+});
+
+test('confirmed account deletion revokes locally only after server accepts and hides the editor', async () => {
+  const calls = [];
+  const { deleteAccount } = setup(async () => ({}), {
+    dialog: { showMessageBox: async () => ({ response: 1 }) },
+    auth: {
+      status: () => ({ user: { email: 'one@example.test' } }),
+      request: async (route, options) => {
+        assert.equal(route, '/v1/me');
+        assert.equal(options.method, 'DELETE');
+        assert.deepEqual(JSON.parse(options.body), { confirm: 'DELETE', email: 'one@example.test' });
+        calls.push('server');
+        return Response.json({ accepted: true, pending: true });
+      },
+      logout: async (revoke) => { assert.equal(revoke, false); calls.push('logout'); }
+    },
+    workspace: { clearSessionState: () => calls.push('clear') },
+    collaboration: { close: () => calls.push('disconnect') },
+    openProject: async (project) => { assert.equal(project, null); calls.push('hide'); }
+  });
+  assert.equal((await deleteAccount()).accepted, true);
+  assert.deepEqual(calls, ['server', 'logout', 'clear', 'disconnect', 'hide']);
+});
 
 test('saving a version automatically uploads the project bundle to cloud', async () => {
   const uploaded = [];

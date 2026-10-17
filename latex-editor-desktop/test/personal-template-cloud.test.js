@@ -140,3 +140,22 @@ test('CloudSyncManager: syncAllTemplates two-way synchronizes templates', async 
   assert.equal(syncResult2.uploaded, 0);
   assert.equal(syncResult2.downloaded, 0);
 });
+
+test('editing and cloud download preserve description, language, compiler and preview', async (t) => {
+  const { workspace, cloud } = await fixture(t);
+  const project = workspace.createProject('Metadata roundtrip', 'blank');
+  const template = workspace.saveProjectAsTemplate(project.path, 'Before');
+  const png = await fs.readFile(path.resolve(__dirname, '../resources/templates/basic-article/preview.png'));
+  const previewDataUrl = `data:image/png;base64,${png.toString('base64')}`;
+  workspace.personalTemplates.updateMetadata(template.id, {
+    name: 'Mẫu đã chỉnh sửa', description: 'Mô tả giữ qua cloud', language: 'Tiếng Việt', engine: 'xelatex', previewDataUrl
+  });
+  await cloud.uploadTemplate(template.id);
+  workspace.deletePersonalTemplate(template.id);
+  const downloaded = await cloud.downloadTemplate(template.id);
+  assert.equal(downloaded.name, 'Mẫu đã chỉnh sửa');
+  assert.equal(downloaded.description, 'Mô tả giữ qua cloud');
+  assert.equal(downloaded.language, 'Tiếng Việt');
+  assert.equal(downloaded.engine, 'xelatex');
+  assert.equal(downloaded.previewDataUrl, previewDataUrl);
+});

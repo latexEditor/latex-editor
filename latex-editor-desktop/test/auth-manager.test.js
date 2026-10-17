@@ -76,6 +76,58 @@ test('cloud URL accepts HTTPS or local development origins only', () => {
   for (const value of ['http://public.example.test', 'https://user:pass@example.test', 'https://example.test/path', 'file:///tmp']) assert.throws(() => normalizeApiUrl(value));
 });
 
+test('parallel API requests share one renewal and persist the extended encrypted session', async (t) => {
+  let renewals = 0;
+  const expiresAt = Date.now() + 7 * 86400000;
+  const { auth, config, storage } = await fixture(t, { fetch: async (url) => {
+    if (url.endsWith('/auth/refresh')) {
+      renewals++;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      return Response.json({ expiresAt });
+    }
+    return Response.json({ ok: true });
+  } });
+  auth.session = { user: { id: 'one' }, token: 't'.repeat(43), expiresAt: Date.now() + 60000 };
+  await Promise.all([auth.request('/v1/projects'), auth.request('/v1/templates')]);
+  assert.equal(renewals, 1);
+  assert.equal(auth.session.expiresAt, expiresAt);
+  const saved = JSON.parse(storage.decryptString(await fs.readFile(config.sessionFile)));
+  assert.equal(saved.expiresAt, expiresAt);
+  assert.equal(JSON.stringify(auth.status()).includes(saved.token), false);
+});
+
+test('logout during renewal cannot restore a session or leave its file on disk', async (t) => {
+  let started, release;
+  const renewing = new Promise((resolve) => { started = resolve; });
+  const { auth, config } = await fixture(t, { fetch: async () => {
+    started();
+    await new Promise((resolve) => { release = resolve; });
+    return Response.json({ expiresAt: Date.now() + 7 * 86400000 });
+  } });
+  auth.session = { user: { id: 'one' }, token: 't'.repeat(43), expiresAt: Date.now() + 60000 };
+  const operation = auth.request('/v1/projects');
+  const rejected = assert.rejects(operation, /thay đổi/);
+  await renewing;
+  await auth.logout(false);
+  release();
+  await rejected;
+  assert.equal(auth.status().signedIn, false);
+  await assert.rejects(fs.access(config.sessionFile));
+});
+
+test('failed optional renewal is throttled and a valid session still works against an older Worker', async (t) => {
+  let renewals = 0;
+  const { auth } = await fixture(t, { fetch: async (url) => {
+    if (url.endsWith('/auth/refresh')) { renewals++; return new Response('{}', { status: 404 }); }
+    return Response.json({ ok: true });
+  } });
+  auth.session = { user: { id: 'one' }, token: 't'.repeat(43), expiresAt: Date.now() + 60000 };
+  await auth.request('/v1/projects');
+  await auth.request('/v1/templates');
+  assert.equal(renewals, 1);
+  assert.equal(auth.status().signedIn, true);
+});
+
 test('logout waits for pending encrypted writes and prevents stale session persistence', async (t) => {
   let release;
   let started;
