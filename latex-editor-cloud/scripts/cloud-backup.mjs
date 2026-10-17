@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ACCOUNT, SOURCE, createBackup, verifyBackup } from './backup-lib.mjs';
+import { ACCOUNT, SOURCE, createBackup, verifyBackup, auditSource } from './backup-lib.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 function wranglerEntry() {
@@ -61,15 +61,17 @@ function adapter() {
 
 try {
   const [mode = 'create', manifestKey, restoreDirectory, ...extra] = process.argv.slice(2);
-  if (extra.length || !['create', 'verify', 'restore-local'].includes(mode)
-    || (mode === 'create' && manifestKey) || (mode !== 'create' && !manifestKey)
-    || (mode === 'verify' && restoreDirectory) || (mode === 'restore-local' && !restoreDirectory)) {
-    throw new Error('Usage: npm run backup -- [create | verify MANIFEST_KEY | restore-local MANIFEST_KEY NEW_DIRECTORY]');
+  if (extra.length || !['create', 'audit', 'verify', 'verify-incomplete', 'restore-local'].includes(mode)
+    || (['create', 'audit'].includes(mode) && manifestKey) || (!['create', 'audit'].includes(mode) && !manifestKey)
+    || (mode !== 'restore-local' && restoreDirectory) || (mode === 'restore-local' && !restoreDirectory)) {
+    throw new Error('Usage: npm run backup -- [create | audit | verify MANIFEST_KEY | verify-incomplete INCOMPLETE_KEY | restore-local MANIFEST_KEY NEW_DIRECTORY]');
   }
-  console.log(mode === 'create' ? 'Exporting D1 and backing up to private latex-editor-backups...' : 'Verifying private backup checksums...');
+  console.log(mode === 'create' ? 'Exporting D1 and backing up to private latex-editor-backups...' : mode === 'audit' ? 'Auditing D1 references against R2 (read-only)...' : 'Verifying private backup checksums...');
   const io = adapter();
-  const result = mode === 'create' ? await createBackup(io) : await verifyBackup(io, manifestKey, { restoreLocal: mode === 'restore-local' ? path.resolve(restoreDirectory) : null });
+  const result = mode === 'create' ? await createBackup(io) : mode === 'audit' ? await auditSource(io)
+    : await verifyBackup(io, manifestKey, { restoreLocal: mode === 'restore-local' ? path.resolve(restoreDirectory) : null, allowIncomplete: mode === 'verify-incomplete' });
   console.log(JSON.stringify(result));
+  if (mode === 'audit' && !result.complete) process.exitCode = 1;
 } catch (error) {
   // Never serialize child-process error objects: they may contain private output.
   console.error(error.message);

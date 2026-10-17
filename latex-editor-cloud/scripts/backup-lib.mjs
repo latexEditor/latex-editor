@@ -106,9 +106,11 @@ export async function createBackup(adapter, { now = Date.now(), id = randomUUID(
   }
 }
 
-export function validateManifest(manifestKey, manifest) {
-  if (!/^daily\/[A-Za-z0-9_-]+\/manifest\.json$/.test(manifestKey)) throw new Error('Invalid backup manifest key.');
-  const prefix = manifestKey.slice(0, -'/manifest.json'.length);
+export function validateManifest(manifestKey, manifest, { allowIncomplete = false } = {}) {
+  if (!/^daily\/[A-Za-z0-9_-]+\/(manifest|incomplete)\.json$/.test(manifestKey)) throw new Error('Invalid backup manifest key.');
+  const partial = manifestKey.endsWith('/incomplete.json');
+  if (partial && (!allowIncomplete || manifest?.complete !== false || !Array.isArray(manifest.unavailable))) throw new Error('Incomplete backups cannot be restored as complete backups.');
+  const prefix = manifestKey.slice(0, manifestKey.lastIndexOf('/'));
   if (manifest?.version !== 1 || manifest.account !== ACCOUNT || manifest.source !== SOURCE || manifest.destination !== DESTINATION
     || !Array.isArray(manifest.objects) || manifest.objects.length > 100000
     || manifest.database?.key !== `${prefix}/database.sql`) throw new Error('Invalid backup manifest.');
@@ -118,6 +120,13 @@ export function validateManifest(manifestKey, manifest) {
   for (const object of manifest.objects) {
     if (!validObjectKey(object.key) || object.backupKey !== `${prefix}/objects/${object.key}` || !checksum(object, OBJECT_LIMIT) || keys.has(object.key)) throw new Error('Invalid object in backup manifest.');
     keys.add(object.key);
+  }
+  if (partial) {
+    if (!manifest.unavailable.length || manifest.unavailable.length + keys.size > 100000) throw new Error('Invalid incomplete backup metadata.');
+    for (const object of manifest.unavailable) {
+      if (!validObjectKey(object.key) || keys.has(object.key) || typeof object.reason !== 'string' || object.reason.length > 500) throw new Error('Invalid unavailable object.');
+      keys.add(object.key);
+    }
   }
   return manifest;
 }
@@ -129,32 +138,57 @@ async function verifyFile(file, expected) {
 
 // Downloads and validates every byte before restoring. The adapter deliberately
 // only exposes local restore operations; this tool cannot overwrite production.
-export async function verifyBackup(adapter, manifestKey, { restoreLocal = null } = {}) {
-  if (!/^daily\/[A-Za-z0-9_-]+\/manifest\.json$/.test(manifestKey)) throw new Error('Invalid backup manifest key.');
+export async function verifyBackup(adapter, manifestKey, { restoreLocal = null, allowIncomplete = false } = {}) {
+  const partial = manifestKey?.endsWith('/incomplete.json');
+  if (!/^daily\/[A-Za-z0-9_-]+\/(manifest|incomplete)\.json$/.test(manifestKey)) throw new Error('Invalid backup manifest key.');
+  if (partial && (!allowIncomplete || restoreLocal)) throw new Error('Incomplete backups support verification only, never restore.');
   const directory = await privateTemporaryDirectory();
   try {
     const manifestFile = path.join(directory, 'manifest.json');
     await adapter.get(DESTINATION, manifestKey, manifestFile);
     if ((await stat(manifestFile)).size > 32 * 1024 * 1024) throw new Error('Manifest too large.');
-    const manifest = validateManifest(manifestKey, JSON.parse(await readFile(manifestFile, 'utf8')));
+    const manifest = validateManifest(manifestKey, JSON.parse(await readFile(manifestFile, 'utf8')), { allowIncomplete });
     const databaseFile = path.join(directory, 'database.sql');
     await adapter.get(DESTINATION, manifest.database.key, databaseFile);
     await verifyFile(databaseFile, manifest.database);
     const keys = await snapshotKeys(databaseFile);
     const files = [];
     const declared = new Set(manifest.objects.map((object) => object.key));
+    if (partial) for (const object of manifest.unavailable) declared.add(object.key);
     if (keys.length !== declared.size || keys.some((key) => !declared.has(key))) throw new Error('Manifest does not match D1 snapshot.');
     for (const [index, object] of manifest.objects.entries()) {
       const file = path.join(directory, `object-${index}.bin`);
       await adapter.get(DESTINATION, object.backupKey, file);
       await verifyFile(file, object);
       files.push({ key: object.key, file });
+      if (!restoreLocal) await rm(file);
     }
     if (restoreLocal) {
       await adapter.initializeLocalRestore(restoreLocal);
       for (const object of files) await adapter.restoreObjectLocal(object.key, object.file, restoreLocal);
       await adapter.restoreDatabaseLocal(databaseFile, restoreLocal);
     }
-    return { verified: true, restoredLocally: Boolean(restoreLocal), objects: files.length };
+    const result = { verified: true, restoredLocally: Boolean(restoreLocal), objects: files.length };
+    return partial ? { ...result, complete: false, unavailableObjects: manifest.unavailable.length } : result;
+  } finally { await rm(directory, { recursive: true, force: true }); }
+}
+
+export async function auditSource(adapter) {
+  const directory = await privateTemporaryDirectory();
+  try {
+    const database = path.join(directory, 'database.sql');
+    await adapter.exportDatabase(database);
+    const keys = await snapshotKeys(database);
+    const unavailable = [];
+    let availableObjects = 0;
+    for (const key of keys) {
+      const file = path.join(directory, 'object.bin');
+      try {
+        await adapter.get(SOURCE, key, file);
+        availableObjects++;
+      } catch (error) { unavailable.push({ key, reason: String(error.message).slice(0, 500) }); }
+      finally { await rm(file, { force: true }); }
+    }
+    return { complete: unavailable.length === 0, totalObjects: keys.length, availableObjects, unavailable };
   } finally { await rm(directory, { recursive: true, force: true }); }
 }

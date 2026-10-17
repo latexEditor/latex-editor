@@ -64,7 +64,7 @@
 - [ ] Cơ chế giải quyết xung đột (conflict resolution / branch UI) khi snapshot cloud có thay đổi đồng thời.
 - [x] Đồng bộ template cá nhân lên Cloudflare R2 để dùng xuyên suốt nhiều máy (đóng gói ZIP bằng zlib Node.js, REST API trên Worker, lưu R2 & D1, đồng bộ hai chiều trên desktop).
 - [ ] Thư viện mẫu cộng đồng (Community templates) tải từ cloud.
-- [ ] Giao diện chỉnh sửa metadata và ảnh xem trước của template cá nhân.
+- [x] Giao diện chỉnh sửa metadata và ảnh xem trước của template cá nhân; lưu cục bộ hoặc lưu và đồng bộ cloud, giữ nguyên ID và nội dung tài liệu.
 - [ ] Onboard domain Email Sending thật cho Cloudflare Worker khi chuyển sang plan phù hợp.
 
 Chi tiết migration, quota, giới hạn GC và trạng thái backup: [Cloud Operations](../../latex-editor-cloud/OPERATIONS.md).

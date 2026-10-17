@@ -134,6 +134,18 @@ hoặc dashboard chi phí riêng.
 
 ### Verify và restore local
 
+Kiểm tra nguồn R2 theo các tham chiếu D1, chỉ đọc và không sửa/xóa dữ liệu:
+
+```powershell
+npm --prefix latex-editor-cloud run backup -- audit
+npm --prefix latex-editor-cloud run backup -- verify-incomplete daily/THOI-GIAN_UUID/incomplete.json
+```
+
+`audit` trả danh sách key thiếu và exit code 1 nếu nguồn không đầy đủ. Giữ kết quả
+trong môi trường riêng tư vì key là metadata nội bộ. `verify-incomplete` chỉ xác minh
+checksum các file đã sao lưu và báo số object thiếu; không biến backup thiếu thành
+backup hoàn chỉnh. Script luôn từ chối restore bản incomplete, kể cả restore local.
+
 Lệnh create in ra `manifestKey` của bản hoàn tất. Dùng chính key đó:
 
 ```powershell

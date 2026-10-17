@@ -4,7 +4,7 @@ import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
-import { ACCOUNT, SOURCE, DESTINATION, createBackup, verifyBackup, validateManifest } from '../scripts/backup-lib.mjs';
+import { ACCOUNT, SOURCE, DESTINATION, createBackup, verifyBackup, validateManifest, auditSource } from '../scripts/backup-lib.mjs';
 
 const projectKey = 'bundles/11111111-1111-4111-8111-111111111111/revision.bundle';
 const templateKey = 'templates/google-123/personal-11111111-1111-4111-8111-111111111111/template.zip';
@@ -99,4 +99,31 @@ test('verification alone never restores or changes source objects', async (t) =>
   assert.equal(verified.restoredLocally, false);
   assert.deepEqual(writes, []);
   assert.deepEqual([...buckets.get(SOURCE).entries()], before);
+});
+
+test('incomplete verification validates available bytes and cannot restore a partial snapshot', async (t) => {
+  const { adapter, buckets, writes, root } = await fixture(t);
+  buckets.get(SOURCE).delete(templateKey);
+  await assert.rejects(createBackup(adapter), /source objects unavailable/);
+  const key = [...buckets.get(DESTINATION).keys()].find((value) => value.endsWith('/incomplete.json'));
+  const checked = await verifyBackup(adapter, key, { allowIncomplete: true });
+  assert.equal(checked.complete, false);
+  assert.equal(checked.objects, 1);
+  assert.equal(checked.unavailableObjects, 1);
+  assert.deepEqual(writes, []);
+  await assert.rejects(verifyBackup(adapter, key, { allowIncomplete: true, restoreLocal: root }), /never restore/);
+  await assert.rejects(verifyBackup(adapter, key), /Incomplete/);
+});
+
+test('source audit locates unavailable references without writing either bucket', async (t) => {
+  const { adapter, buckets } = await fixture(t);
+  buckets.get(SOURCE).delete(templateKey);
+  const before = [...buckets.get(SOURCE).entries()];
+  const audit = await auditSource(adapter);
+  assert.equal(audit.complete, false);
+  assert.equal(audit.availableObjects, 1);
+  assert.equal(audit.totalObjects, 2);
+  assert.equal(audit.unavailable[0].key, templateKey);
+  assert.deepEqual([...buckets.get(SOURCE).entries()], before);
+  assert.equal(buckets.get(DESTINATION).size, 0);
 });

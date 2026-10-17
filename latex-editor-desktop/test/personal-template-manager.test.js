@@ -135,3 +135,52 @@ test('rejects templates without root main.tex and rolls back the destination', a
   await assert.rejects(manager.importZip(archive), /main\.tex/i);
   assert.deepEqual(fs.readdirSync(directory), []);
 });
+
+test('edits template metadata and preview without changing its id or document files', (t) => {
+  const { root, manager } = fixture(t);
+  const project = path.join(root, 'project');
+  fs.mkdirSync(project);
+  fs.writeFileSync(path.join(project, 'main.tex'), 'Original document');
+  const template = manager.saveProject(project, 'Original');
+  const png = fs.readFileSync(path.resolve(__dirname, '../resources/templates/basic-article/preview.png'));
+  const dataUrl = `data:image/png;base64,${png.toString('base64')}`;
+  const edited = manager.updateMetadata(template.id, { name: 'Báo cáo riêng', description: 'Mô tả mới', language: 'Tiếng Việt', engine: 'xelatex', previewDataUrl: dataUrl });
+  assert.equal(edited.id, template.id);
+  assert.equal(edited.name, 'Báo cáo riêng');
+  assert.equal(edited.engine, 'xelatex');
+  assert.equal(edited.description, 'Mô tả mới');
+  assert.equal(edited.previewDataUrl, dataUrl);
+  assert.equal(fs.readFileSync(path.join(manager.resolve(template.id), 'main.tex'), 'utf8'), 'Original document');
+  assert.equal(manager.updateMetadata(template.id, { previewDataUrl: null }).previewDataUrl, null);
+});
+
+test('invalid edits and failed publication preserve the previous template', (t) => {
+  const { root, directory, manager } = fixture(t);
+  const project = path.join(root, 'project');
+  fs.mkdirSync(project);
+  fs.writeFileSync(path.join(project, 'main.tex'), 'Original');
+  const template = manager.saveProject(project, 'Keep me');
+  for (const changes of [{ engine: 'shell' }, { previewDataUrl: 'data:image/svg+xml;base64,AAAA' }, { description: 'x'.repeat(501) }, { id: 'another-id' }]) {
+    assert.throws(() => manager.updateMetadata(template.id, changes));
+    assert.equal(manager.list()[0].name, 'Keep me');
+  }
+  manager.fs = { ...fs, renameSync: (from, to) => {
+    if (path.basename(from).startsWith('.import-edit-')) throw new Error('Publish failed');
+    return fs.renameSync(from, to);
+  } };
+  assert.throws(() => manager.updateMetadata(template.id, { name: 'Do not publish' }), /Publish failed/);
+  assert.equal(manager.list()[0].name, 'Keep me');
+  assert.deepEqual(fs.readdirSync(directory), [template.id]);
+});
+
+test('invalid cloud metadata never deletes an existing local template', async (t) => {
+  const { root, manager } = fixture(t);
+  const project = path.join(root, 'project');
+  fs.mkdirSync(project);
+  fs.writeFileSync(path.join(project, 'main.tex'), 'Original');
+  const template = manager.saveProject(project, 'Keep me');
+  const buffer = makeZip({ 'main.tex': 'Wrong replacement', 'template.json': '{invalid json' });
+  await assert.rejects(manager.importFromBuffer(buffer, 'Cloud', template.id));
+  assert.equal(fs.readFileSync(path.join(manager.resolve(template.id), 'main.tex'), 'utf8'), 'Original');
+  assert.equal(manager.list()[0].name, 'Keep me');
+});

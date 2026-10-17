@@ -4,6 +4,8 @@ contextBridge.exposeInMainWorld('latexEditor', {
   getState: () => ipcRenderer.invoke('latex:get-state'),
   listProjects: () => ipcRenderer.invoke('latex:list-projects'),
   listTemplates: () => ipcRenderer.invoke('latex:list-templates'),
+  updateTemplate: (templateId, changes) => ipcRenderer.invoke('latex:template-update-local', templateId, changes),
+  chooseTemplatePreview: () => ipcRenderer.invoke('latex:template-choose-preview'),
   importTemplate: (name) => ipcRenderer.invoke('latex:import-template', name),
   saveProjectAsTemplate: (projectPath, name) => ipcRenderer.invoke('latex:save-project-template', projectPath, name),
   forgetProject: (projectPath) => ipcRenderer.invoke('latex:forget-project', projectPath),

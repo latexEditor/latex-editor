@@ -1,6 +1,8 @@
 const path = require('node:path');
+const fs = require('node:fs');
 const { pathToFileURL } = require('node:url');
-const { BrowserWindow } = require('electron');
+const { BrowserWindow, nativeImage } = require('electron');
+const { validatePreviewPng } = require('./PersonalTemplateManager');
 
 function registerFeatureIpc({ ipcMain, dialog, workspace, history, auth, cloud, collaboration, openProject }) {
   const shellUrl = pathToFileURL(path.resolve(__dirname, '../renderer/index.html')).toString();
@@ -126,6 +128,21 @@ function registerFeatureIpc({ ipcMain, dialog, workspace, history, auth, cloud, 
       return { ...result, canceled: false };
     },
     'latex:template-cloud-list': () => cloud.listCloudTemplates(),
+    'latex:template-update-local': (_event, templateId, changes) => workspace.personalTemplates.updateMetadata(templateId, changes),
+    'latex:template-choose-preview': async (event) => {
+      const result = await dialog.showOpenDialog(owner(event), {
+        title: 'Chọn ảnh xem trước template', properties: ['openFile'],
+        filters: [{ name: 'Ảnh PNG (tối đa 2 MiB)', extensions: ['png'] }]
+      });
+      if (result.canceled || !result.filePaths[0]) return null;
+      const file = result.filePaths[0];
+      const info = fs.lstatSync(file);
+      if (!info.isFile() || info.size > 2 * 1024 * 1024) throw new Error('Hãy chọn ảnh PNG tối đa 2 MiB.');
+      const bytes = validatePreviewPng(fs.readFileSync(file));
+      const image = nativeImage.createFromBuffer(bytes);
+      if (image.isEmpty()) throw new Error('Không đọc được ảnh PNG đã chọn.');
+      return `data:image/png;base64,${bytes.toString('base64')}`;
+    },
     'latex:template-cloud-upload': (_event, templateId) => cloud.uploadTemplate(templateId),
     'latex:template-cloud-download': (_event, templateId) => cloud.downloadTemplate(templateId),
     'latex:template-cloud-delete': async (event, templateId, templateName) => {

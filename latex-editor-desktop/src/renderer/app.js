@@ -10,6 +10,77 @@ let recentProjects = [];
 let creatingProject = false;
 let recentRequest = 0;
 let projectTemplates = [];
+const templateEditDialog = document.querySelector('#template-edit-dialog');
+let editingTemplate = null;
+let editedPreview;
+let savingTemplate = false;
+
+function renderEditedPreview(value) {
+  const image = document.querySelector('#template-edit-image');
+  image.hidden = !value;
+  if (value) image.src = value;
+  else image.removeAttribute('src');
+  document.querySelector('#template-edit-placeholder').hidden = Boolean(value);
+}
+
+async function editTemplate(template) {
+  editingTemplate = template;
+  editedPreview = undefined;
+  document.querySelector('#template-edit-name').value = template.name;
+  document.querySelector('#template-edit-description').value = template.description;
+  document.querySelector('#template-edit-language').value = template.language;
+  document.querySelector('#template-edit-engine').value = template.engine;
+  document.querySelector('#template-edit-feedback').textContent = '';
+  renderEditedPreview(template.previewDataUrl);
+  document.querySelector('#template-edit-save-cloud').disabled = !(await api.authStatus()).signedIn;
+  templateEditDialog.showModal();
+}
+
+document.querySelector('#template-edit-choose-image').addEventListener('click', async () => {
+  if (savingTemplate) return;
+  try {
+    const image = await api.chooseTemplatePreview();
+    if (image) { editedPreview = image; renderEditedPreview(image); }
+  } catch (error) { document.querySelector('#template-edit-feedback').textContent = error.message; }
+});
+document.querySelector('#template-edit-remove-image').addEventListener('click', () => {
+  if (savingTemplate) return;
+  editedPreview = null;
+  renderEditedPreview(null);
+});
+document.querySelector('#template-edit-close').addEventListener('click', () => { if (!savingTemplate) templateEditDialog.close(); });
+templateEditDialog.addEventListener('cancel', (event) => { if (savingTemplate) event.preventDefault(); });
+document.querySelector('#template-edit-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  if (!editingTemplate || savingTemplate) return;
+  const cloud = event.submitter?.value === 'cloud';
+  const feedback = document.querySelector('#template-edit-feedback');
+  const buttons = [...templateEditDialog.querySelectorAll('button')];
+  const disabled = buttons.map((button) => button.disabled);
+  let saved = false;
+  savingTemplate = true;
+  buttons.forEach((button) => { button.disabled = true; });
+  try {
+    const changes = {
+      name: document.querySelector('#template-edit-name').value.trim(),
+      description: document.querySelector('#template-edit-description').value,
+      language: document.querySelector('#template-edit-language').value,
+      engine: document.querySelector('#template-edit-engine').value
+    };
+    if (editedPreview !== undefined) changes.previewDataUrl = editedPreview;
+    editingTemplate = await api.updateTemplate(editingTemplate.id, changes);
+    saved = true;
+    editedPreview = undefined;
+    await loadTemplates(editingTemplate.id);
+    if (cloud) await api.templateCloudUpload(editingTemplate.id);
+    feedback.textContent = cloud ? 'Đã lưu trên máy và đồng bộ mẫu lên cloud.' : 'Đã lưu thay đổi trên máy.';
+  } catch (error) {
+    feedback.textContent = (saved ? 'Đã lưu trên máy nhưng chưa đồng bộ được. ' : '') + error.message;
+  } finally {
+    savingTemplate = false;
+    buttons.forEach((button, index) => { button.disabled = disabled[index]; });
+  }
+});
 
 const normalizeTemplateSearch = (value) => String(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd').toLowerCase();
 
@@ -176,6 +247,16 @@ async function loadTemplates(selectedTemplateId = null) {
       const actions = document.createElement('div');
       actions.className = 'template-option-actions';
 
+      const editBtn = document.createElement('button');
+      editBtn.type = 'button';
+      editBtn.className = 'template-edit-button';
+      editBtn.textContent = 'Chỉnh sửa';
+      editBtn.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        editTemplate(template).catch((error) => { errorBox.textContent = error.message; });
+      });
+
       const uploadBtn = document.createElement('button');
       uploadBtn.type = 'button';
       uploadBtn.textContent = '☁ Tải lên Cloud';
@@ -208,7 +289,7 @@ async function loadTemplates(selectedTemplateId = null) {
         }
       });
 
-      actions.append(uploadBtn, delBtn);
+      actions.append(editBtn, uploadBtn, delBtn);
       content.append(actions);
     }
     radio.addEventListener('change', updateTemplateNote);
