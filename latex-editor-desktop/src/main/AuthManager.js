@@ -72,7 +72,9 @@ class AuthManager {
       const saved = JSON.parse(decrypted);
       if (saved.apiUrl === this.apiUrl && saved.expiresAt > Date.now() && /^[A-Za-z0-9_-]{43}$/.test(saved.token || '') && saved.user?.id) this.session = saved;
     } catch (error) {
-      if (error.code !== 'ENOENT') await fs.rm(this.sessionFile, { force: true }).catch(() => {});
+      // A different OS/Electron encryption profile or temporary key-store error
+      // must not destroy the user's saved session. Logout explicitly removes it.
+      if (error.code !== 'ENOENT') console.warn('Saved session could not be read; its encrypted file was preserved.');
     }
   }
 

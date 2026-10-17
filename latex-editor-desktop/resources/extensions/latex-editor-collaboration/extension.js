@@ -219,20 +219,25 @@ function cursorDecorations(user) {
   const name = (user.name || 'Thành viên').trim();
   decorations = {
     cursor: vscode.window.createTextEditorDecorationType({
-      borderLeft: `3px solid ${color}`,
+      before: {
+        contentText: ' ',
+        backgroundColor: color,
+        width: '2px',
+        margin: '0'
+      },
       after: {
         contentText: ` ${name} `,
         backgroundColor: color,
         color: '#ffffff',
-        fontSize: '11px',
+        fontSize: '10px',
         fontWeight: 'bold',
         lineHeight: '1',
-        margin: '0 0 0 2px',
-        borderRadius: '3px'
+        margin: '0',
+        borderRadius: '3px 3px 3px 0'
       }
     }),
     selection: vscode.window.createTextEditorDecorationType({
-      backgroundColor: `${color}35`,
+      backgroundColor: `${color}30`,
       border: `1px dashed ${color}80`
     })
   };

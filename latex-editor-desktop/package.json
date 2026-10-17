@@ -12,6 +12,7 @@
     "dev": "electron .",
     "test": "node --test test",
     "test:ui": "electron scripts/test-project-ui.cjs",
+    "test:instances": "node scripts/test-instance-profiles.cjs",
     "check": "node scripts/check-syntax.cjs",
     "check:cloud": "electron scripts/check-cloud-runtime.cjs",
     "setup:code-server": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/setup-code-server-runtime.ps1",

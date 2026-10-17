@@ -2,9 +2,13 @@
 
 ## Trạng thái triển khai
 
-Các thay đổi trong tài liệu này cần migration D1 và deploy Worker mới trước khi
-có tác dụng trên production. Backup dùng bucket private `latex-editor-backups`
-trong cùng tài khoản Cloudflare; lịch GitHub Actions cần bật riêng như bên dưới.
+Đã áp migration `0001_operations.sql` và deploy Worker production ngày 2026-10-17
+(version `564a4d07-9994-4856-a791-497eaf409c1d`). Kiểm tra `/health` trả HTTP 200,
+`configured: true`, `collaborationConfigured: true`; không còn migration chờ áp dụng.
+48 test cloud và dry-run đều pass trước deploy. Chưa nghiệm thu API có xác thực
+trong lượt deploy này vì công cụ chẩn đoán không có phiên đăng nhập local.
+Backup dùng bucket private `latex-editor-backups` trong cùng tài khoản Cloudflare;
+lịch GitHub Actions cần bật riêng như bên dưới. Email Sending chưa được cấu hình.
 
 ## Quota và cách tính dung lượng
 

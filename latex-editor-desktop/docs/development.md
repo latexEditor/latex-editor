@@ -39,6 +39,34 @@ code-server được cô lập trên Node 20.19.5 bởi script setup để khôn
 
 ## Kiểm thử tự động
 
+### Hai tài khoản trên cùng máy
+
+Giữ phiên đầu chạy bằng `npm start`. Mở terminal mới ở thư mục gốc repo và
+chạy phiên thứ hai với thư mục dữ liệu và cổng riêng.
+
+Git Bash (terminal có chữ `MINGW64`):
+
+```bash
+LATEX_EDITOR_DATA_DIR="$APPDATA/LatexEditor-Test2" CODE_SERVER_PORT=8766 npm start
+```
+
+CMD:
+
+```cmd
+set "LATEX_EDITOR_DATA_DIR=%APPDATA%\LatexEditor-Test2"
+set "CODE_SERVER_PORT=8766"
+npm start
+```
+
+App tự tách cả Electron `userData` trước khi lấy single-instance lock; không cần
+truyền `--user-data-dir` qua các tầng npm workspace. Mỗi profile có session Google,
+project, code-server và template riêng. Không trỏ hai profile vào cùng thư mục
+project khi test cộng tác: nhận lời mời và tải bản cloud trên phiên thứ hai.
+Cùng một profile vẫn chỉ mở một phiên. Phiên mặc định giữ nguyên dữ liệu cũ.
+
+`npm run test:instances --workspace latex-editor-desktop` kiểm tra hai tiến trình
+Electron thật chạy đồng thời và từ chối tiến trình thứ ba dùng trùng profile.
+
 - `npm test`: Chạy 74 unit và integration test cho desktop (workspace, template, compiler detection, Git history, safeStorage auth, cloud sync, collaboration queue).
 - `npm run test:ui`: Khởi động Electron ẩn và kiểm tra tương tác thực tế giữa shell UI, preload bridge và IPC handler.
 - `npm run check`: Kiểm tra cú pháp toàn bộ file mã nguồn.
