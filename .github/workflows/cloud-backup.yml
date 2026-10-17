@@ -27,7 +27,22 @@ jobs:
             exit 1
           fi
       - name: Export D1 and copy referenced R2 objects to private backup bucket
-        run: npm --prefix latex-editor-cloud run backup -- create
+        id: create_backup
+        run: |
+          set -e
+          OUTPUT=$(npm --prefix latex-editor-cloud run backup -- create)
+          echo "$OUTPUT"
+          MANIFEST_KEY=$(echo "$OUTPUT" | grep -o 'daily/[^"]*/manifest.json' | head -n 1)
+          if [ -z "$MANIFEST_KEY" ]; then
+            echo "Failed to extract manifest key from backup output."
+            exit 1
+          fi
+          echo "manifest_key=$MANIFEST_KEY" >> "$GITHUB_OUTPUT"
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUD_BACKUP_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: a533b356d5a670c392fdc7dd9969c5c9
+      - name: Verify backup integrity
+        run: npm --prefix latex-editor-cloud run backup -- verify "${{ steps.create_backup.outputs.manifest_key }}"
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUD_BACKUP_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: a533b356d5a670c392fdc7dd9969c5c9
