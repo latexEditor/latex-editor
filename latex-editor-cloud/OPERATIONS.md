@@ -47,8 +47,8 @@ lịch GitHub Actions cần bật riêng như bên dưới. Email Sending chưa 
   session và user record được dọn. Người dùng có thể đăng ký lại sau khi hoàn tất.
 - Các bản local trên máy không bị xóa. Bundle mồ côi có từ trước migration
   được GC dọn sau khi không còn tham chiếu. Backup vận hành được lưu riêng;
-  xóa tài khoản không xóa ngay các bản backup. Hiện chưa bật tự xóa backup,
-  cần thống nhất retention trước khi bật lịch định kỳ.
+  xóa tài khoản không xóa ngay các bản backup. Đã bật lifecycle rule tự động
+  xóa backup cũ sau 60 ngày trên bucket `latex-editor-backups`.
 
 ## Gia hạn phiên
 
@@ -184,8 +184,8 @@ Trước khi bật:
    database và hai bucket tương ứng. Không dùng OAuth token cá nhân trong CI.
 2. Lưu token trong repository Actions secret `CLOUD_BACKUP_API_TOKEN`.
    Không dán token vào chat, source code hay GitHub repository variable.
-3. Thống nhất thời gian giữ backup; có thể kích hoạt lifecycle rule tự động xóa backup cũ trên bucket `latex-editor-backups` (ví dụ 30 ngày) bằng Wrangler:
-   `npm exec --package=wrangler@4.120.0 -- wrangler r2 bucket lifecycle add latex-editor-backups daily-retention daily/ --expire-days 30 -y`.
+3. Đã cấu hình retention: Đã kích hoạt lifecycle rule `daily-retention-60d` trên bucket `latex-editor-backups`
+   (prefix `daily/`, tự động expire các object sau 60 ngày) vào ngày 2026-10-18.
 4. Merge workflow vào default branch, đặt repository variable
    `CLOUD_BACKUP_ENABLED=true`, chạy thủ công và kiểm tra manifest/verify trước
    khi dựa vào lịch hằng ngày. Chưa có token hoặc variable thì lịch chưa bật.

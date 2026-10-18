@@ -63,7 +63,7 @@ trong từng mục; không thay thế nghiệm thu production với người dù
   - Lịch CI cần secret `CLOUD_BACKUP_API_TOKEN`, variable bật lịch và workflow trên default branch; chưa bật retention tự xóa.
 - [x] Công cụ audit D1/R2 chỉ đọc và verify backup incomplete; chặn restore bản thiếu. Bản backup cũ đã xác minh checksum 3 object, còn 1 object thiếu.
 - [x] Xác định và xử lý tham chiếu R2 bị thiếu, tạo được backup hoàn chỉnh và nghiệm thu phục hồi local từ backup cloud thật (Đã hoàn thành ngày 2026-10-17: audit đủ 5/5 object, tạo manifest hoàn tất, verify SHA-256 toàn vẹn và restore-local thành công).
-- [ ] Bật và nghiệm thu lịch backup CI sau khi cấu hình secret/variable và thống nhất retention.
+- [ ] Bật và nghiệm thu lịch backup CI sau khi cấu hình secret `CLOUD_BACKUP_API_TOKEN` và variable `CLOUD_BACKUP_ENABLED=true` trên default branch (Đã kích hoạt lifecycle rule 60 ngày trên R2 ngày 2026-10-18).
 - [x] Gia hạn session tối đa 7 ngày/lượt, giới hạn tuyệt đối 30 ngày từ Google login; desktop tự gia hạn và chống phục hồi phiên sau logout.
 - [ ] Load-test bundle gần giới hạn 50 MiB trên Worker production.
 - [ ] Dashboard giám sát lỗi, dung lượng, chi phí và cảnh báo.
