@@ -1,6 +1,13 @@
 const { app, safeStorage } = require('electron');
 const config = require('../src/main/config');
+const path = require('node:path');
 const { AuthManager } = require('../src/main/AuthManager');
+
+// Script entrypoints otherwise use Electron's default profile, whose async
+// encryption key differs from the profile used by `electron .`.
+app.setPath('userData', process.env.LATEX_EDITOR_DATA_DIR
+  ? path.resolve(process.env.LATEX_EDITOR_DATA_DIR, 'electron')
+  : path.join(app.getPath('appData'), require('../package.json').name));
 
 async function inspectRoute(auth, route) {
   if (!auth.session?.token) return { status: null, ok: false, error: 'not-signed-in' };

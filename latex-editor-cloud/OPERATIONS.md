@@ -2,9 +2,13 @@
 
 ## Trạng thái triển khai
 
-Các thay đổi trong tài liệu này cần migration D1 và deploy Worker mới trước khi
-có tác dụng trên production. Backup dùng bucket private `latex-editor-backups`
-trong cùng tài khoản Cloudflare; lịch GitHub Actions cần bật riêng như bên dưới.
+Đã áp migration `0001_operations.sql` và deploy Worker production ngày 2026-10-17
+(version `564a4d07-9994-4856-a791-497eaf409c1d`). Kiểm tra `/health` trả HTTP 200,
+`configured: true`, `collaborationConfigured: true`; không còn migration chờ áp dụng.
+48 test cloud và dry-run đều pass trước deploy. Chưa nghiệm thu API có xác thực
+trong lượt deploy này vì công cụ chẩn đoán không có phiên đăng nhập local.
+Backup dùng bucket private `latex-editor-backups` trong cùng tài khoản Cloudflare;
+lịch GitHub Actions cần bật riêng như bên dưới. Email Sending chưa được cấu hình.
 
 ## Quota và cách tính dung lượng
 
@@ -43,8 +47,8 @@ trong cùng tài khoản Cloudflare; lịch GitHub Actions cần bật riêng nh
   session và user record được dọn. Người dùng có thể đăng ký lại sau khi hoàn tất.
 - Các bản local trên máy không bị xóa. Bundle mồ côi có từ trước migration
   được GC dọn sau khi không còn tham chiếu. Backup vận hành được lưu riêng;
-  xóa tài khoản không xóa ngay các bản backup. Hiện chưa bật tự xóa backup,
-  cần thống nhất retention trước khi bật lịch định kỳ.
+  xóa tài khoản không xóa ngay các bản backup. Đã bật lifecycle rule tự động
+  xóa backup cũ sau 60 ngày trên bucket `latex-editor-backups`.
 
 ## Gia hạn phiên
 
@@ -180,17 +184,17 @@ Trước khi bật:
    database và hai bucket tương ứng. Không dùng OAuth token cá nhân trong CI.
 2. Lưu token trong repository Actions secret `CLOUD_BACKUP_API_TOKEN`.
    Không dán token vào chat, source code hay GitHub repository variable.
-3. Thống nhất thời gian giữ backup; hiện **không có lifecycle tự xóa**.
+3. Đã cấu hình retention: Đã kích hoạt lifecycle rule `daily-retention-60d` trên bucket `latex-editor-backups`
+   (prefix `daily/`, tự động expire các object sau 60 ngày) vào ngày 2026-10-18.
 4. Merge workflow vào default branch, đặt repository variable
    `CLOUD_BACKUP_ENABLED=true`, chạy thủ công và kiểm tra manifest/verify trước
    khi dựa vào lịch hằng ngày. Chưa có token hoặc variable thì lịch chưa bật.
 
-Kiểm tra dịch vụ thật ngày 15/10/2026: bucket backup đã được tạo trong account
-được cho phép, `r2.dev` bị tắt và không có custom domain. Snapshot hiện có 4
-tham chiếu R2 nhưng 1 object trả `object not found`; đã sao chép được SQL và 3
-object còn lại dưới nhãn `incomplete.json`. Cần xử lý tham chiếu bị thiếu trước
-khi nghiệm thu backup đầy đủ hoặc bật lịch CI. Không tự sửa dữ liệu production
-và không coi snapshot một phần là backup hoàn tất.
+Nghiệm thu dịch vụ thật ngày 17/10/2026:
+- Audit kiểm tra toàn bộ 5/5 bundle R2 được tham chiếu trong D1 đều tồn tại đầy đủ (`unavailable: []`).
+- Đã tạo thành công bản backup hoàn chỉnh đầu tiên `daily/2026-10-17T16-28-02-633Z_ea2c2970-c641-4db0-a67e-7cf4b862cce2/manifest.json`.
+- Xác minh checksum SHA-256 (verify) đạt 100% khớp dữ liệu.
+- Nghiệm thu khôi phục cục bộ (`restore-local`) từ backup cloud thật thành công: toàn bộ 5 bundle Git và database D1 đã được khôi phục vào kho lưu trữ cô lập, bảng `projects` đủ 5 project và bảng `sessions` được xóa sạch bảo mật.
 
 Backup private vẫn chiếm dung lượng và số thao tác R2; theo dõi dung lượng thực
 tế. Workflow chỉ in tiến độ và metadata kỹ thuật, không upload artifact riêng tư.

@@ -1,5 +1,8 @@
 # Lộ trình phát triển hệ thống LaTeX Editor
 
+Cập nhật: 2026-10-17. `[x]` nghĩa là đã triển khai và kiểm thử ở mức ghi rõ
+trong từng mục; không thay thế nghiệm thu production với người dùng thật.
+
 ## Đợt 1 — Thư viện mẫu (Hoàn thành)
 
 - [x] Phân loại, tìm kiếm không dấu, thông tin ngôn ngữ và compiler.
@@ -18,7 +21,7 @@
 - [x] Project mới yêu cầu đăng nhập, tự tạo snapshot/upload lên R2; lưu hoặc khôi phục lịch sử tự đồng bộ lại và vẫn giữ bản local khi mạng lỗi.
 - [x] Mời qua link bí mật (hỗ trợ cả API backend và UI desktop tạo/sao chép/nhập mã tham gia `id:token`).
 - [x] Giao diện desktop cho chia sẻ project và quản lý thành viên (hộp thoại Chia sẻ, danh sách thành viên kèm role badge, mời qua email/link, thu hồi và xóa thành viên).
-- [x] Môi trường Worker & D1 thật đã được tạo và deploy trên Cloudflare (`latex-editor-db`, binding `DB`, 5 bảng).
+- [x] Môi trường Worker & D1 thật đã được tạo và deploy trên Cloudflare (`latex-editor-db`, binding `DB`; đã bổ sung migration vận hành).
 - [x] Test Electron cho giao diện mời, chấp nhận bằng tài khoản thứ hai, danh sách thành viên, xóa thành viên và thu hồi link mời.
 - [x] Worker tạo email transactional dạng text + HTML và trang hướng dẫn nhận lời mời; tự hạ cấp về thông báo trong app khi binding email chưa sẵn sàng.
 - [x] Link mời dùng cặp invitation ID + token bí mật; server xác minh token trước khi thêm thành viên.
@@ -34,9 +37,10 @@
 
 ## Đợt 4 — Hoàn thiện Desktop và Đóng gói phát hành (Ưu tiên hiện tại)
 
-- [x] **Deploy Worker HEAD**: Đã deploy bản Worker mới nhất lên Cloudflare (`Version ID: 1e1f9ec2-0033-4b79-976b-3c190537e464`); xác nhận qua `/health` (`configured: true`, `collaborationConfigured: true`).
+- [x] **Deploy Worker**: Đã áp `0001_operations.sql` và deploy ngày 2026-10-17 (`Version ID: 564a4d07-9994-4856-a791-497eaf409c1d`); `/health` HTTP 200, `configured: true`, `collaborationConfigured: true`, không còn migration chờ áp dụng.
+- [x] **Hai profile trên một máy**: Tách Electron `userData` trước single-instance lock khi dùng `LATEX_EDITOR_DATA_DIR`; hai phiên chạy đồng thời, cùng profile vẫn bị chặn mở trùng. Đã kiểm thử bằng tiến trình Electron thật; hướng dẫn CMD/Git Bash trong [Development](development.md).
 - [ ] **Kiểm thử nghiệm thu 2 tài khoản thật**: Thử nghiệm trên môi trường production với hai tài khoản Google thật:
-  - Mời và chấp nhận chia sẻ qua email & link bí mật.
+  - Mời theo địa chỉ email và chấp nhận trong app hoặc qua link bí mật (gửi email thật chưa bật).
   - Chỉnh sửa đồng thời, hiển thị cursor/presence và hội tụ nội dung.
   - Kiểm tra viewer bị chặn ghi, thu hồi quyền khi đang online.
   - Reconnect khi ngắt mạng và khôi phục lịch sử khi nhiều người đang mở.
@@ -51,12 +55,15 @@
 
 ## Đợt 5 — Cloud, Vận hành và Thư viện mẫu
 
-- [x] Quota dung lượng theo tài khoản/project, reservation nguyên tử D1, API và UI xem dung lượng (cần áp migration vận hành trước deploy).
+- [x] Quota dung lượng theo tài khoản/project, reservation nguyên tử D1, API và UI xem dung lượng; migration và Worker đã triển khai production ngày 2026-10-17, còn nghiệm thu luồng có xác thực.
 - [x] Cron GC có cursor, thời gian chờ 24 giờ, kiểm tra tham chiếu D1 và thu hồi reservation mồ côi.
 - [x] Chức năng xóa project cloud (Durable Object cleanup, R2 bundle purge, D1 cascade delete, confirmation dialog trên Desktop).
 - [x] Xóa tài khoản: hộp thoại xác nhận, thu hồi session, marker bền vững và cleanup theo batch; giữ project có owner khác.
 - [x] Script backup D1/R2 sang bucket private riêng, SHA-256, manifest hoàn tất, verify/restore local và workflow hằng ngày.
   - Lịch CI cần secret `CLOUD_BACKUP_API_TOKEN`, variable bật lịch và workflow trên default branch; chưa bật retention tự xóa.
+- [x] Công cụ audit D1/R2 chỉ đọc và verify backup incomplete; chặn restore bản thiếu. Bản backup cũ đã xác minh checksum 3 object, còn 1 object thiếu.
+- [x] Xác định và xử lý tham chiếu R2 bị thiếu, tạo được backup hoàn chỉnh và nghiệm thu phục hồi local từ backup cloud thật (Đã hoàn thành ngày 2026-10-17: audit đủ 5/5 object, tạo manifest hoàn tất, verify SHA-256 toàn vẹn và restore-local thành công).
+- [ ] Bật và nghiệm thu lịch backup CI sau khi cấu hình secret `CLOUD_BACKUP_API_TOKEN` và variable `CLOUD_BACKUP_ENABLED=true` trên default branch (Đã kích hoạt lifecycle rule 60 ngày trên R2 ngày 2026-10-18).
 - [x] Gia hạn session tối đa 7 ngày/lượt, giới hạn tuyệt đối 30 ngày từ Google login; desktop tự gia hạn và chống phục hồi phiên sau logout.
 - [ ] Load-test bundle gần giới hạn 50 MiB trên Worker production.
 - [ ] Dashboard giám sát lỗi, dung lượng, chi phí và cảnh báo.
@@ -68,7 +75,10 @@
 - [ ] Onboard domain Email Sending thật cho Cloudflare Worker khi chuyển sang plan phù hợp.
 
 Chi tiết migration, quota, giới hạn GC và trạng thái backup: [Cloud Operations](../../latex-editor-cloud/OPERATIONS.md).
-Các mục vận hành đánh dấu hoàn tất ở trên là phần triển khai trong code; cần migration/deploy và nghiệm thu production trước khi phát hành.
+Migration vận hành và deploy Worker đã hoàn tất. Lần kiểm tra gần nhất: 98 test
+desktop, 48 test cloud, test giao diện Electron và test nhiều profile đều pass.
+API production có xác thực, cron thực tế và các luồng xóa/khôi phục vẫn cần nghiệm thu;
+không chạy thử xóa dữ liệu người dùng chỉ để đánh dấu hoàn thành.
 
 ## Đợt 6 — Web Client và Build LaTeX từ xa
 

@@ -1,6 +1,7 @@
 const { app, BrowserWindow, WebContentsView, dialog, ipcMain, shell, session, safeStorage } = require('electron');
 const path = require('node:path');
 const config = require('./config');
+const { acquireInstanceLock } = require('./InstanceProfile');
 const { CodeServerManager } = require('./CodeServerManager');
 const { WorkspaceManager } = require('./WorkspaceManager');
 const { LatexRuntimeManager } = require('./LatexRuntimeManager');
@@ -27,7 +28,7 @@ let activeProject;
 let serverUrl;
 let quitting = false;
 let shellOverlayOpen = false;
-const hasSingleInstanceLock = app.requestSingleInstanceLock();
+const hasSingleInstanceLock = acquireInstanceLock(app, process.env.LATEX_EDITOR_DATA_DIR);
 
 function state() {
   return {
@@ -393,6 +394,78 @@ const EDITOR_CUSTOM_CSS = `
     flex-shrink: 0 !important;
   }
   @keyframes latex-presence-pulse { 50% { opacity: 0.4; } }
+
+  /* Realtime collaboration remote cursors (visible caret | + floating name tag) */
+  /* 1. Caret vertical bar (|) via ced-*-3 */
+  .monaco-editor .view-lines [class*="ced-"][class*="-3"],
+  .monaco-editor [class*="ced-"][class*="-3"] {
+    position: relative !important;
+    display: inline-block !important;
+    width: 0 !important;
+    height: 1.25em !important;
+    min-height: 18px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    vertical-align: text-bottom !important;
+    box-sizing: content-box !important;
+    z-index: 20 !important;
+  }
+
+  .monaco-editor .view-lines [class*="ced-"][class*="-3"]::before,
+  .monaco-editor [class*="ced-"][class*="-3"]::before {
+    content: '' !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: -1px !important;
+    width: 2.5px !important;
+    height: 100% !important;
+    border-radius: 1px !important;
+    pointer-events: none !important;
+    z-index: 20 !important;
+    box-shadow: 0 0 2px rgba(0, 0, 0, 0.45) !important;
+  }
+
+  /* 2. Floating name badge via ced-*-4 (floating above the cursor) */
+  .monaco-editor .view-lines [class*="ced-"][class*="-4"],
+  .monaco-editor [class*="ced-"][class*="-4"] {
+    position: relative !important;
+    display: inline-block !important;
+    width: 0 !important;
+    height: 1.25em !important;
+    min-height: 18px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    vertical-align: text-bottom !important;
+    z-index: 100 !important;
+  }
+
+  .monaco-editor .view-lines [class*="ced-"][class*="-4"]::after,
+  .monaco-editor [class*="ced-"][class*="-4"]::after {
+    position: absolute !important;
+    bottom: 100% !important;
+    left: -1px !important;
+    transform: translateY(-2px) !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    width: max-content !important;
+    height: 15px !important;
+    line-height: 15px !important;
+    color: #ffffff !important;
+    font-size: 10px !important;
+    font-weight: 600 !important;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+    padding: 0 4px !important;
+    border-radius: 3px 3px 3px 0 !important;
+    white-space: nowrap !important;
+    pointer-events: none !important;
+    z-index: 100 !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.28) !important;
+    user-select: none !important;
+    letter-spacing: normal !important;
+    opacity: 0.95 !important;
+  }
 `;
 
 const EDITOR_CUSTOM_SCRIPT = `

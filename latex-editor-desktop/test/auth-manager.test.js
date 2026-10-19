@@ -59,6 +59,20 @@ test('canceling login cannot resurrect a signed-out session', async (t) => {
   assert.equal(auth.status().signingIn, false);
 });
 
+test('unavailable encryption key never deletes a saved session during initialization', async (t) => {
+  const { config } = await fixture(t);
+  const bytes = Buffer.from('encrypted with a different profile');
+  await fs.writeFile(config.sessionFile, bytes);
+  const auth = new AuthManager(config, {
+    safeStorage: { isEncryptionAvailable: () => true, decryptString: () => { throw new Error('key unavailable'); } },
+    openExternal: async () => {}
+  });
+  t.after(() => auth.dispose());
+  await auth.initialize();
+  assert.equal(auth.status().signedIn, false);
+  assert.deepEqual(await fs.readFile(config.sessionFile), bytes);
+});
+
 test('expired API sessions are cleared and logout warns if remote revocation fails', async (t) => {
   const { auth } = await fixture(t, { fetch: async () => new Response('{}', { status: 401 }) });
   auth.session = { user: { id: 'one' }, token: 't'.repeat(43), expiresAt: Date.now() + 10000 };
