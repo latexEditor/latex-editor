@@ -1,0 +1,9 @@
+{
+  "name": "LaTeX Editor",
+  "short_name": "LaTeX",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4f2ed",
+  "theme_color": "#18231f",
+  "icons": []
+}

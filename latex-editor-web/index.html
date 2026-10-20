@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Không gian viết LaTeX tập trung, local-first và sẵn sàng cộng tác." />
+    <meta name="theme-color" content="#18231f" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="stylesheet" href="./src/styles.css" />
+    <title>LaTeX Editor</title>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="#" aria-label="LaTeX Editor — trang chủ">
+          <span class="brand-mark" aria-hidden="true">L<sup>A</sup>T<sub>E</sub>X</span>
+          <span class="brand-copy"><strong>LaTeX</strong><small>editor</small></span>
+        </a>
+        <div class="document-title-wrap">
+          <button class="ghost icon-only mobile-menu" id="mobile-menu" aria-label="Mở danh sách file">☰</button>
+          <input id="project-name" class="document-title" aria-label="Tên project" maxlength="100" />
+          <span class="save-state" id="save-state"><i></i> Đã lưu cục bộ</span>
+        </div>
+        <div class="top-actions">
+          <button class="ghost" id="share-button"><span aria-hidden="true">↗</span> Chia sẻ</button>
+          <button class="primary" id="compile-button"><span aria-hidden="true">▶</span> Biên dịch</button>
+          <button class="avatar" id="account-button" aria-label="Tài khoản">NA</button>
+        </div>
+      </header>
+
+      <div class="workspace">
+        <nav class="activity-bar" aria-label="Công cụ">
+          <button class="activity active" data-panel="files" aria-label="Tệp" title="Tệp">▱</button>
+          <button class="activity" data-panel="search" aria-label="Tìm kiếm" title="Tìm kiếm">⌕</button>
+          <button class="activity" data-panel="history" aria-label="Lịch sử" title="Lịch sử">↶</button>
+          <button class="activity" data-panel="team" aria-label="Cộng tác" title="Cộng tác">♙</button>
+          <span class="activity-spacer"></span>
+          <button class="activity" id="theme-toggle" aria-label="Đổi giao diện" title="Đổi giao diện">◐</button>
+          <button class="activity" id="settings-button" aria-label="Cài đặt" title="Cài đặt">⚙</button>
+        </nav>
+
+        <aside class="sidebar" id="sidebar">
+          <section class="side-section projects-section">
+            <div class="section-heading">
+              <span>PROJECT</span>
+              <button class="subtle-icon" id="new-project-button" aria-label="Tạo project">＋</button>
+            </div>
+            <select id="project-select" class="project-select" aria-label="Chọn project"></select>
+          </section>
+          <section class="side-section file-section">
+            <div class="section-heading">
+              <span>TỆP</span>
+              <button class="subtle-icon" id="new-file-button" aria-label="Tạo tệp">＋</button>
+            </div>
+            <div id="file-tree" class="file-tree"></div>
+          </section>
+          <section class="side-section outline-section">
+            <div class="section-heading"><span>DÀN Ý</span></div>
+            <div id="outline" class="outline"></div>
+          </section>
+          <div class="sidebar-footer">
+            <button class="cloud-status" id="cloud-status"><i></i><span><strong>Local-first</strong><small>Dữ liệu ở trình duyệt này</small></span></button>
+          </div>
+        </aside>
+
+        <main class="editor-area">
+          <div class="tab-strip">
+            <div id="tabs" class="tabs"></div>
+            <button class="tab-action" id="download-button" title="Xuất project" aria-label="Xuất project">⇩</button>
+          </div>
+          <div class="editor-surface">
+            <div class="line-numbers" id="line-numbers" aria-hidden="true"></div>
+            <textarea id="editor" aria-label="Trình soạn thảo LaTeX" spellcheck="false"></textarea>
+          </div>
+          <div class="statusbar">
+            <span id="cursor-position">Ln 1, Col 1</span>
+            <span>UTF-8</span>
+            <span>LaTeX</span>
+            <span class="status-spacer"></span>
+            <button id="toggle-console">⌁ Build log</button>
+          </div>
+          <section class="console" id="console" aria-live="polite">
+            <div class="console-head"><strong>Build log</strong><button id="close-console" aria-label="Đóng log">×</button></div>
+            <pre id="console-output">Sẵn sàng. Nhấn “Biên dịch” để tạo bản xem nhanh.</pre>
+          </section>
+        </main>
+
+        <aside class="preview-panel">
+          <div class="preview-toolbar">
+            <span class="preview-label"><i></i> BẢN XEM NHANH</span>
+            <div class="preview-actions">
+              <button id="zoom-out" aria-label="Thu nhỏ">−</button>
+              <span id="zoom-label">82%</span>
+              <button id="zoom-in" aria-label="Phóng to">＋</button>
+              <button id="open-preview" aria-label="Mở toàn màn hình">↗</button>
+            </div>
+          </div>
+          <div class="preview-canvas" id="preview-canvas">
+            <article class="paper" id="paper">
+              <div class="paper-rule"></div>
+              <h1 id="preview-title"></h1>
+              <p class="paper-author" id="preview-author"></p>
+              <div id="preview-content"></div>
+              <footer><span>LaTeX Editor · bản xem nhanh</span><span>1</span></footer>
+            </article>
+          </div>
+        </aside>
+      </div>
+    </div>
+
+    <dialog id="project-dialog" class="modal">
+      <form method="dialog">
+        <div class="modal-kicker">BẮT ĐẦU MỘT Ý TƯỞNG</div>
+        <h2>Tạo tài liệu mới</h2>
+        <p>Chọn một nền tảng vừa đủ để bạn bắt đầu viết ngay.</p>
+        <label class="field-label" for="new-project-name">Tên project</label>
+        <input id="new-project-name" class="field" value="Tài liệu mới" maxlength="100" />
+        <div class="template-grid" id="template-grid"></div>
+        <div class="modal-actions">
+          <button value="cancel" class="ghost">Hủy</button>
+          <button value="confirm" class="primary" id="confirm-project">Tạo project</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="settings-dialog" class="modal compact-modal">
+      <form method="dialog">
+        <div class="modal-kicker">CẤU HÌNH</div>
+        <h2>Kết nối dịch vụ</h2>
+        <p>Nhập URL backend khi đã có endpoint biên dịch web an toàn.</p>
+        <label class="field-label" for="api-url">Backend URL</label>
+        <input id="api-url" class="field" type="url" placeholder="https://latex-editor.example.workers.dev" />
+        <div class="security-note"><strong>Lưu ý bảo mật</strong> Web client không lưu Bearer token desktop. Backend web cần session cookie HttpOnly, CORS và CSRF riêng.</div>
+        <div class="modal-actions"><button value="cancel" class="ghost">Hủy</button><button value="confirm" class="primary" id="save-settings">Lưu cấu hình</button></div>
+      </form>
+    </dialog>
+
+    <div class="toast" id="toast" role="status"></div>
+    <script type="module" src="./src/app.js"></script>
+  </body>
+</html>
