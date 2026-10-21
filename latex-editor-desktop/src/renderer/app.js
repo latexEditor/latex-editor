@@ -366,10 +366,13 @@ function renderProjectTabs(projects, activeProject) {
     const openButton = document.createElement('button');
     openButton.className = 'project-tab-open';
     openButton.type = 'button';
+    const icon = document.createElement('span');
+    icon.className = 'project-tab-icon';
+    icon.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>';
     const name = document.createElement('span');
     name.className = 'project-tab-name';
     name.textContent = project.name;
-    openButton.append(name);
+    openButton.append(icon, name);
     const handleOpen = async () => {
       try {
         for (const dialog of document.querySelectorAll('dialog')) {
