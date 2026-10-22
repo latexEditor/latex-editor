@@ -4,7 +4,7 @@ const { pathToFileURL } = require('node:url');
 const { BrowserWindow, nativeImage } = require('electron');
 const { validatePreviewPng } = require('./PersonalTemplateManager');
 
-function registerFeatureIpc({ ipcMain, dialog, workspace, history, auth, cloud, collaboration, openProject }) {
+function registerFeatureIpc({ ipcMain, dialog, workspace, history, auth, cloud, collaboration, openProject, clipboard }) {
   const shellUrl = pathToFileURL(path.resolve(__dirname, '../renderer/index.html')).toString();
   const owner = (event) => BrowserWindow?.fromWebContents?.(event.sender) || null;
   const project = (value) => {
@@ -23,7 +23,24 @@ function registerFeatureIpc({ ipcMain, dialog, workspace, history, auth, cloud, 
     }
   };
   const handlers = {
-    'latex:history-list': (_event, value) => history.list(project(value)),
+    'latex:clipboard-write': (_event, value) => {
+      if (typeof value !== 'string' || !value.trim() || value.length > 4096) {
+        throw new Error('Nội dung sao chép không hợp lệ.');
+      }
+      if (!clipboard?.writeText) throw new Error('Clipboard chưa sẵn sàng.');
+      clipboard.writeText(value);
+      return true;
+    },
+    'latex:history-list': async (_event, value) => {
+      const location = project(value);
+      let cloudUpdated = false;
+      let cloudWarning = null;
+      if (auth.status().signedIn) {
+        try { cloudUpdated = Boolean((await cloud.refreshHistory(location)).updated); }
+        catch (error) { cloudWarning = `Không làm mới được lịch sử từ cloud: ${error.message}`; }
+      }
+      return { entries: await history.list(location), cloudUpdated, cloudWarning };
+    },
     'latex:history-save': async (_event, value, message) => {
       const location = project(value);
       const result = await history.save(location, message, auth.status().user || {});
@@ -126,6 +143,19 @@ function registerFeatureIpc({ ipcMain, dialog, workspace, history, auth, cloud, 
       if (confirmation.response !== 1) return { canceled: true };
       const result = await cloud.deleteProjectById(id);
       return { ...result, canceled: false };
+    },
+    'latex:cloud-publication-get': (_event, value) => cloud.getPublication(project(value)),
+    'latex:cloud-publication-publish': (_event, value, expiresInDays) => cloud.publishPdf(project(value), expiresInDays),
+    'latex:cloud-publication-revoke': async (event, value) => {
+      const location = project(value);
+      const confirmation = await dialog.showMessageBox(owner(event), {
+        type: 'warning', title: 'Thu hồi link PDF',
+        message: 'Thu hồi link xem PDF công khai?',
+        detail: 'Người đang giữ link sẽ không thể mở PDF nữa. Source và lịch sử project không bị ảnh hưởng.',
+        buttons: ['Hủy', 'Thu hồi link'], defaultId: 0, cancelId: 0, noLink: true
+      });
+      if (confirmation.response !== 1) return { canceled: true };
+      return { ...(await cloud.revokePublication(location)), canceled: false };
     },
     'latex:template-cloud-list': () => cloud.listCloudTemplates(),
     'latex:template-update-local': (_event, templateId, changes) => workspace.personalTemplates.updateMetadata(templateId, changes),

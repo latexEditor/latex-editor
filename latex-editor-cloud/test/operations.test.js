@@ -94,6 +94,30 @@ test('GC preserves referenced/current and in-flight data, removes old unreferenc
   assert.equal((await env.DB.prepare('SELECT bytes FROM cloud_storage WHERE key = ?').bind(saved.bundle_key).first()).bytes, (await env.PROJECTS.head(saved.bundle_key)).size);
 });
 
+test('maintenance removes expired public PDFs but preserves links without expiration', async (t) => {
+  const env = fixture(t);
+  const owner = (await signedIn(handleRequest, env, 'publication-owner')).session;
+  await api(env, owner.token, `/v1/projects/${id}`, upload());
+  const publish = (days) => api(env, owner.token, `/v1/projects/${id}/publication`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/pdf', 'X-Source-Head': head, 'X-PDF-Filename': 'result.pdf', 'X-Expires-In-Days': String(days) },
+    body: '%PDF-1.7\nresult\n%%EOF'
+  });
+  assert.equal((await publish(1)).status, 200);
+  const expired = await env.DB.prepare('SELECT id, pdf_key FROM project_publications WHERE project_id = ?').bind(id).first();
+  await env.DB.prepare('UPDATE project_publications SET expires_at = ? WHERE project_id = ?').bind(Date.now() - 1, id).run();
+  const report = await runMaintenance(env);
+  assert.equal(report.expiredPublications, 1);
+  assert.equal(await env.PROJECTS.head(expired.pdf_key), null);
+  assert.equal((await handleRequest(new Request(`${env.PUBLIC_BASE_URL}/p/${expired.id}`), env)).status, 404);
+
+  assert.equal((await publish(0)).status, 200);
+  const permanent = await env.DB.prepare('SELECT id, pdf_key FROM project_publications WHERE project_id = ?').bind(id).first();
+  await runMaintenance(env);
+  assert.ok(await env.PROJECTS.head(permanent.pdf_key));
+  assert.equal((await handleRequest(new Request(`${env.PUBLIC_BASE_URL}/p/${permanent.id}`), env)).status, 200);
+});
+
 test('GC checkpoints pagination and retries safely after R2 failure', async (t) => {
   const env = fixture(t);
   for (let index = 0; index < 65; index++) {

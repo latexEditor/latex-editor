@@ -65,6 +65,25 @@ test('bundle roundtrip preserves full history, Unicode names and binary assets',
   assert.equal((await history.save(copy, 'Unchanged')).unchanged, true);
 });
 
+test('refreshing a cloud bundle fast-forwards history without overwriting open project files', async (t) => {
+  const { root, project, history } = await fixture(t);
+  await history.save(project, 'Shared base');
+  const base = await history.exportBundle(project);
+  const collaborator = path.join(root, 'Collaborator');
+  await fs.mkdir(collaborator);
+  await history.importBundle(collaborator, base.data, base.head);
+  await fs.writeFile(path.join(collaborator, 'main.tex'), 'Collaborator version');
+  const collaboratorCommit = await history.save(collaborator, 'Collaborator edit', { name: 'User B' });
+  const remote = await history.exportBundle(collaborator);
+  await fs.writeFile(path.join(project, 'main.tex'), 'Unsaved local draft');
+
+  const refreshed = await history.refreshBundle(project, remote.data, remote.head);
+
+  assert.equal(refreshed.updated, true);
+  assert.equal((await history.list(project))[0].hash, collaboratorCommit.hash);
+  assert.equal(await fs.readFile(path.join(project, 'main.tex'), 'utf8'), 'Unsaved local draft');
+});
+
 test('invalid restore revisions and unsafe cloud paths are rejected before modifying files', async (t) => {
   const { project, history } = await fixture(t);
   await history.save(project, 'First');

@@ -96,11 +96,17 @@ export async function cleanDeletedAccount(env, userId) {
 }
 
 export async function runMaintenance(env, now = Date.now()) {
-  const report = { deletedAccounts: 0, removedObjects: 0, reconciled: 0, errors: 0 };
+  const report = { deletedAccounts: 0, expiredPublications: 0, removedObjects: 0, reconciled: 0, errors: 0 };
   if (await backupInProgress(env, now)) {
     report.skippedForBackup = true;
     await saveReport(env, report, now);
     return report;
+  }
+  const { results: expiredPublications } = await env.DB.prepare('SELECT project_id, pdf_key FROM project_publications WHERE expires_at > ? AND expires_at <= ? ORDER BY expires_at LIMIT 2').bind(0, now).all();
+  for (const publication of expiredPublications) {
+    await env.DB.prepare('DELETE FROM project_publications WHERE project_id = ?').bind(publication.project_id).run();
+    try { await discardStorage(env, publication.pdf_key); report.expiredPublications++; }
+    catch { report.errors++; }
   }
   // Alternate cleanup/GC windows to keep each cron bounded and avoid a failing
   // account starving ordinary GC. Each batch is safe to retry after a crash.
@@ -120,15 +126,16 @@ export async function runMaintenance(env, now = Date.now()) {
   // limits. Grace exceeds the upload timeout; recheck references before removal.
   const state = await env.DB.prepare('SELECT value FROM cloud_maintenance WHERE id = ?').bind('r2-gc').first();
   const listed = await env.PROJECTS.list({ limit: 24, cursor: state?.value || undefined });
-  const candidates = listed.objects.filter((object) => /^(bundles|templates|auth)\//.test(object.key));
+  const candidates = listed.objects.filter((object) => /^(bundles|templates|publications|auth)\//.test(object.key));
   if (candidates.length) {
     const keys = candidates.map((object) => object.key);
     const placeholders = keys.map(() => '?').join(',');
     const references = await env.DB.batch([
       env.DB.prepare(`SELECT bundle_key FROM projects WHERE bundle_key IN (${placeholders})`).bind(...keys),
-      env.DB.prepare(`SELECT bundle_key FROM user_templates WHERE bundle_key IN (${placeholders})`).bind(...keys)
+      env.DB.prepare(`SELECT bundle_key FROM user_templates WHERE bundle_key IN (${placeholders})`).bind(...keys),
+      env.DB.prepare(`SELECT pdf_key FROM project_publications WHERE pdf_key IN (${placeholders})`).bind(...keys)
     ]);
-    const referenced = new Set(references.flatMap((result) => result.results.map((row) => row.bundle_key)));
+    const referenced = new Set(references.flatMap((result) => result.results.map((row) => row.bundle_key || row.pdf_key)));
     const updates = [];
     const garbage = [];
     for (const object of candidates) {

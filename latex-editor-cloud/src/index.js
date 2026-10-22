@@ -1,6 +1,7 @@
-import { OperationsError, reserveStorage, storageUsage, requestAccountDeletion, runMaintenance } from './operations.js';
+import { OperationsError, reserveStorage, discardStorage, storageUsage, requestAccountDeletion, runMaintenance } from './operations.js';
 const encoder = new TextEncoder();
 const MAX_BUNDLE = 50 * 1024 * 1024;
+const MAX_PDF = 50 * 1024 * 1024;
 const TOKEN = /^[A-Za-z0-9_-]{43}$/;
 const ID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -118,6 +119,25 @@ export async function handleRequest(request, env, fetcher = fetch) {
     // Health check
     if (url.pathname === '/health') return json({ service: 'latex-editor-cloud', protocol: 'git-bundle-v1', configured: Boolean(env.DB && env.PROJECTS && env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET), emailConfigured: Boolean(env.EMAIL && env.EMAIL_FROM), collaborationConfigured: Boolean(env.COLLABORATION_ROOMS) });
     if (!env.PROJECTS) throw new HttpError(503, 'Chưa cấu hình R2.');
+
+    // Public, unlisted PDF publication. The random UUID is the bearer link;
+    // project source, membership and Git history are never exposed here.
+    const publicPdf = url.pathname.match(/^\/p\/([a-f0-9-]{36})$/);
+    if (publicPdf && ['GET', 'HEAD'].includes(request.method)) {
+      if (!ID.test(publicPdf[1])) throw new HttpError(404, 'Không tìm thấy bản PDF.');
+      const publication = await env.DB.prepare('SELECT * FROM project_publications WHERE id = ?').bind(publicPdf[1]).first();
+      if (!publication) throw new HttpError(404, 'Không tìm thấy bản PDF.');
+      if (publication.expires_at && publication.expires_at <= Date.now()) throw new HttpError(410, 'Link PDF đã hết hạn.');
+      const pdf = await env.PROJECTS.get(publication.pdf_key);
+      if (!pdf) throw new HttpError(503, 'Bản PDF chưa sẵn sàng.');
+      const encodedName = encodeURIComponent(publication.filename).replace(/'/g, '%27');
+      return new Response(request.method === 'HEAD' ? null : pdf.body, { headers: {
+        'Content-Type': 'application/pdf', 'Content-Length': String(pdf.size),
+        'Content-Disposition': `inline; filename="document.pdf"; filename*=UTF-8''${encodedName}`,
+        'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff',
+        'Referrer-Policy': 'no-referrer'
+      } });
+    }
     if (!env.DB) throw new HttpError(503, 'Chưa cấu hình D1.');
 
     const invitationPage = url.pathname.match(/^\/invite\/([a-f0-9-]{36})$/);
@@ -441,6 +461,62 @@ export async function handleRequest(request, env, fetcher = fetch) {
       return json({ id: project.id, name: project.name, head: project.head, protocol: project.protocol, updatedAt: project.updated_at, role, etag: `"${project.updated_at}"` });
     }
 
+    // Public PDF publication metadata (members can inspect/copy the link).
+    if (subpath === '/publication' && request.method === 'GET') {
+      const publication = await env.DB.prepare('SELECT * FROM project_publications WHERE project_id = ?').bind(projectId).first();
+      if (!publication) return json({ publication: null });
+      return json({ publication: {
+        id: publication.id, url: `${env.PUBLIC_BASE_URL}/p/${publication.id}`,
+        filename: publication.filename, sourceHead: publication.source_head,
+        size: publication.size, publishedAt: publication.published_at,
+        expiresAt: publication.expires_at || null,
+        expired: Boolean(publication.expires_at && publication.expires_at <= Date.now())
+      } });
+    }
+
+    // Publish/update the latest built PDF. The source head must be the current
+    // cloud head so a public result always points to an identifiable snapshot.
+    if (subpath === '/publication' && request.method === 'PUT') {
+      await authorize(env.DB, projectId, current.user.id, WRITE_ROLES);
+      if (!/^application\/pdf(?:\s*;|$)/i.test(request.headers.get('Content-Type') || '')) throw new HttpError(415, 'Chỉ chấp nhận file PDF.');
+      const sourceHead = request.headers.get('X-Source-Head');
+      if (sourceHead !== project.head) throw new HttpError(409, 'Source trên cloud đã thay đổi. Hãy đồng bộ lại project trước khi xuất bản PDF.');
+      let filename;
+      try { filename = decodeURIComponent(request.headers.get('X-PDF-Filename') || ''); } catch { throw new HttpError(400, 'Tên file PDF không hợp lệ.'); }
+      filename = filename.trim();
+      if (!filename || filename.length > 180 || !/\.pdf$/i.test(filename) || /[\\/\x00-\x1f]/.test(filename)) throw new HttpError(400, 'Tên file PDF không hợp lệ.');
+      const expiryDays = Number(request.headers.get('X-Expires-In-Days') || '0');
+      if (!Number.isInteger(expiryDays) || expiryDays < 0 || expiryDays > 365) throw new HttpError(400, 'Thời hạn link PDF không hợp lệ.');
+      const data = await boundedBody(request, MAX_PDF);
+      if (data.length < 8 || new TextDecoder().decode(data.slice(0, 5)) !== '%PDF-') throw new HttpError(400, 'Nội dung tải lên không phải file PDF hợp lệ.');
+      const previous = await env.DB.prepare('SELECT * FROM project_publications WHERE project_id = ?').bind(projectId).first();
+      const publicationId = previous?.id || crypto.randomUUID();
+      const pdfKey = `publications/${projectId}/${crypto.randomUUID()}.pdf`;
+      const owner = await env.DB.prepare("SELECT user_id FROM project_members WHERE project_id = ? AND role = 'owner' ORDER BY joined_at LIMIT 1").bind(projectId).first();
+      if (!owner) throw new HttpError(409, 'Project không có chủ sở hữu.');
+      await reserveStorage(env, { key: pdfKey, userId: owner.user_id, projectId, bytes: data.length });
+      await env.PROJECTS.put(pdfKey, data, { httpMetadata: { contentType: 'application/pdf', contentDisposition: 'inline' } });
+      const now = new Date().toISOString();
+      const expiresAt = expiryDays ? Date.now() + expiryDays * 86400000 : null;
+      await env.DB.prepare(`INSERT INTO project_publications (project_id, id, pdf_key, filename, source_head, size, published_by, published_at, expires_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(project_id) DO UPDATE SET id = excluded.id, pdf_key = excluded.pdf_key, filename = excluded.filename, source_head = excluded.source_head, size = excluded.size, published_by = excluded.published_by, published_at = excluded.published_at, expires_at = excluded.expires_at, updated_at = excluded.updated_at`)
+        .bind(projectId, publicationId, pdfKey, filename, sourceHead, data.length, current.user.id, now, expiresAt, now).run();
+      if (previous?.pdf_key && previous.pdf_key !== pdfKey) {
+        try { await discardStorage(env, previous.pdf_key); }
+        catch (error) { console.error(JSON.stringify({ event: 'publication-old-object-cleanup-pending', projectId, name: error.name })); }
+      }
+      return json({ publication: { id: publicationId, url: `${env.PUBLIC_BASE_URL}/p/${publicationId}`, filename, sourceHead, size: data.length, publishedAt: now, expiresAt, expired: false } });
+    }
+
+    if (subpath === '/publication' && request.method === 'DELETE') {
+      await authorize(env.DB, projectId, current.user.id, WRITE_ROLES);
+      const publication = await env.DB.prepare('SELECT * FROM project_publications WHERE project_id = ?').bind(projectId).first();
+      if (!publication) return json({ revoked: true });
+      await env.DB.prepare('DELETE FROM project_publications WHERE project_id = ?').bind(projectId).run();
+      try { await discardStorage(env, publication.pdf_key); }
+      catch (error) { console.error(JSON.stringify({ event: 'publication-object-cleanup-pending', projectId, name: error.name })); }
+      return json({ revoked: true });
+    }
+
     // Authenticated real-time room. One Durable Object coordinates each project.
     if ((subpath === '/collaboration' || subpath === '/collaboration/presence') && request.method === 'GET') {
       if (!env.COLLABORATION_ROOMS) throw new HttpError(503, 'Phòng cộng tác chưa được cấu hình.');
@@ -504,6 +580,7 @@ export async function handleRequest(request, env, fetcher = fetch) {
     // DELETE project — owner only
     if (subpath === '' && request.method === 'DELETE') {
       await authorize(env.DB, projectId, current.user.id, ['owner']);
+      const publication = await env.DB.prepare('SELECT pdf_key FROM project_publications WHERE project_id = ?').bind(projectId).first();
 
       // Disconnect all sessions & destroy Durable Object room data
       if (env.COLLABORATION_ROOMS) {
@@ -528,6 +605,10 @@ export async function handleRequest(request, env, fetcher = fetch) {
 
       // Delete from D1 (cascades to project_members and invitations)
       await env.DB.prepare('DELETE FROM projects WHERE id = ?').bind(projectId).run();
+      if (publication?.pdf_key) {
+        try { await discardStorage(env, publication.pdf_key); }
+        catch (error) { console.error(JSON.stringify({ event: 'publication-project-delete-cleanup-pending', projectId, name: error.name })); }
+      }
 
       return json({ deleted: true, projectId });
     }

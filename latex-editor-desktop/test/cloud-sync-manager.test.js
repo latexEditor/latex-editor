@@ -44,6 +44,31 @@ test('desktop-to-worker roundtrip restores real project files and complete Git h
   assert.equal((await cloud.upload(copy.path)).status, 'synced');
 });
 
+test('publishing uses the newest built PDF, keeps source private, and supports revocation', async (t) => {
+  const { project, cloud, env, handleRequest } = await fixture(t);
+  await fs.mkdir(path.join(project.path, 'build'));
+  await fs.writeFile(path.join(project.path, 'build', 'main.pdf'), '%PDF-1.7\ndesktop result\n%%EOF');
+
+  const published = await cloud.publishPdf(project.path, 30);
+  assert.match(published.url, /^https:\/\/cloud\.example\.test\/p\//);
+  assert.equal(published.filename, 'main.pdf');
+  assert.match(published.sourceHead, /^[a-f0-9]{40}$/);
+  const publicResponse = await handleRequest(new Request(published.url), env);
+  assert.equal(publicResponse.status, 200);
+  assert.match(await publicResponse.text(), /desktop result/);
+
+  const metadata = await cloud.getPublication(project.path);
+  assert.equal(metadata.url, published.url);
+  await cloud.revokePublication(project.path);
+  assert.equal(await cloud.getPublication(project.path), null);
+  assert.equal((await handleRequest(new Request(published.url), env)).status, 404);
+});
+
+test('publishing fails locally when no successful PDF build exists', async (t) => {
+  const { project, cloud } = await fixture(t);
+  await assert.rejects(cloud.publishPdf(project.path, 30), /Chưa tìm thấy PDF đã build/);
+});
+
 test('two-device conflict preserves both local work and the remote version', async (t) => {
   const { project, cloud } = await fixture(t);
   const first = await cloud.upload(project.path);
@@ -156,6 +181,14 @@ test('owner can manage team: list members, invite by email and link, accept, col
   await fs.writeFile(path.join(downloaded.path, 'main.tex'), 'Collaborator edits');
   const u2Upload = await userTwoCloud.upload(downloaded.path);
   assert.equal(u2Upload.status, 'synced');
+
+  // Owner refreshes the same local project and sees B's cloud commit without
+  // replacing files currently open in the editor.
+  const ownerWorkingFile = await fs.readFile(path.join(project.path, 'main.tex'), 'utf8');
+  const refreshed = await cloud.refreshHistory(project.path);
+  assert.equal(refreshed.updated, true);
+  assert.equal((await history.list(project.path))[0].hash, u2Upload.project.head);
+  assert.equal(await fs.readFile(path.join(project.path, 'main.tex'), 'utf8'), ownerWorkingFile);
 
   // Owner sees 2 members now
   const updatedMembers = await cloud.listMembers(project.path);

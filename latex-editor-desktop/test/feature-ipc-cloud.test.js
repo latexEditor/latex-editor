@@ -18,9 +18,13 @@ function setup(upload, options = {}) {
       restore: options.restore || (async () => ({ hash: 'b'.repeat(40), backup: 'c'.repeat(40) }))
     },
     auth: options.auth || { status: () => ({ signedIn: true, user: { id: 'owner', email: 'owner@example.test' } }), logout: options.logout || (async () => ({ signedIn: false })) },
-    cloud: { upload, download: options.download, deleteProject: options.deleteProject, deleteProjectById: options.deleteProjectById },
+    cloud: {
+      upload, download: options.download, deleteProject: options.deleteProject, deleteProjectById: options.deleteProjectById,
+      getPublication: options.getPublication, publishPdf: options.publishPdf, revokePublication: options.revokePublication
+    },
     collaboration: options.collaboration,
-    openProject: options.openProject || (async () => {})
+    openProject: options.openProject || (async () => {}),
+    clipboard: options.clipboard || { writeText: () => {} }
   });
   return {
     save: (...args) => handlers.get('latex:history-save')(event, ...args),
@@ -29,9 +33,22 @@ function setup(upload, options = {}) {
     deleteById: (...args) => handlers.get('latex:cloud-delete-by-id')(event, ...args),
     download: (...args) => handlers.get('latex:cloud-download')(event, ...args),
     deleteAccount: (...args) => handlers.get('latex:auth-delete-account')(event, ...args),
-    logout: (...args) => handlers.get('latex:auth-logout')(event, ...args)
+    logout: (...args) => handlers.get('latex:auth-logout')(event, ...args),
+    publishPdf: (...args) => handlers.get('latex:cloud-publication-publish')(event, ...args),
+    revokePublication: (...args) => handlers.get('latex:cloud-publication-revoke')(event, ...args),
+    copyText: (...args) => handlers.get('latex:clipboard-write')(event, ...args)
   };
 }
+
+test('clipboard IPC writes link through Electron and rejects invalid input', async () => {
+  const copied = [];
+  const { copyText } = setup(async () => ({}), {
+    clipboard: { writeText: (value) => copied.push(value) }
+  });
+  assert.equal(await copyText('https://example.test/p/abc'), true);
+  assert.deepEqual(copied, ['https://example.test/p/abc']);
+  assert.throws(() => copyText('   '), /không hợp lệ/);
+});
 
 test('account deletion cancellation never sends a request or clears local state', async () => {
   let requested = false;
@@ -214,5 +231,18 @@ test('logging out wipes session state, closes collaboration, and resets open pro
   assert.equal(sessionStateCleared, true);
   assert.equal(collaborationClosed, true);
   assert.equal(resetProject, null);
+});
+
+test('PDF publication IPC uses the validated project path and revocation requires confirmation', async () => {
+  const calls = [];
+  const { publishPdf, revokePublication } = setup(async () => ({}), {
+    dialog: { showMessageBox: async () => ({ response: 1 }) },
+    workspace: { getProjectLocation: (value) => `safe:${value}` },
+    publishPdf: async (project, days) => { calls.push(['publish', project, days]); return { url: 'https://example.test/p/id' }; },
+    revokePublication: async (project) => { calls.push(['revoke', project]); return { revoked: true }; }
+  });
+  assert.equal((await publishPdf('paper', 30)).url, 'https://example.test/p/id');
+  assert.equal((await revokePublication('paper')).canceled, false);
+  assert.deepEqual(calls, [['publish', 'safe:paper', 30], ['revoke', 'safe:paper']]);
 });
 

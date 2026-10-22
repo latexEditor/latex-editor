@@ -35,7 +35,8 @@
     }
   }
   async function loadHistory() {
-    const entries = await api.historyList(historyProject.path);
+    const result = await api.historyList(historyProject.path);
+    const entries = Array.isArray(result) ? result : result.entries;
     const container = $('#history-list');
     container.replaceChildren();
     selectedHash = null;
@@ -68,6 +69,7 @@
       });
       container.append(button);
     }
+    return Array.isArray(result) ? { entries } : result;
   }
 
   $('#history-button').addEventListener('click', async () => {
@@ -76,7 +78,10 @@
     await api.hideEditor();
     historyDialog.showModal();
     $('#history-project-name').textContent = historyProject.name;
-    await historyAction(async () => { await loadHistory(); feedback('#history-feedback', ''); });
+    await historyAction(async () => {
+      const result = await loadHistory();
+      feedback('#history-feedback', result.cloudWarning || (result.cloudUpdated ? 'Đã nhận phiên bản mới từ cloud.' : ''), Boolean(result.cloudWarning));
+    });
   });
   $('#history-save-form').addEventListener('submit', (event) => {
     event.preventDefault();
@@ -88,7 +93,11 @@
       feedback('#history-feedback', result.cloudWarning ? `${localMessage} ${result.cloudWarning}` : `${localMessage} Đã đồng bộ lên cloud.`, Boolean(result.cloudWarning));
     });
   });
-  $('#history-refresh').addEventListener('click', () => historyAction(async () => { await loadHistory(); feedback('#history-feedback', 'Đã cập nhật lịch sử.'); }));
+  $('#history-refresh').addEventListener('click', () => historyAction(async () => {
+    const result = await loadHistory();
+    const message = result.cloudWarning || (result.cloudUpdated ? 'Đã nhận phiên bản mới từ cloud.' : 'Lịch sử đã là bản mới nhất.');
+    feedback('#history-feedback', message, Boolean(result.cloudWarning));
+  }));
   $('#history-restore').addEventListener('click', () => historyAction(async () => {
     if (!selectedHash) return;
     const result = await api.historyRestore(historyProject.path, selectedHash);
@@ -471,12 +480,16 @@
     if (shareBusy) return;
     shareBusy = true;
     $('#share-refresh').disabled = true;
+    $('#publication-publish').disabled = true;
+    $('#publication-revoke').disabled = true;
     feedback('#share-feedback', 'Đang xử lý…');
     try { await task(); }
     catch (error) { feedback('#share-feedback', error.message, true); }
     finally {
       shareBusy = false;
       $('#share-refresh').disabled = false;
+      $('#publication-publish').disabled = false;
+      $('#publication-revoke').disabled = false;
     }
   }
 
@@ -491,6 +504,10 @@
     $('#share-invite-section').hidden = true;
     $('#share-pending-section').hidden = true;
     $('#share-my-role').textContent = '';
+    $('#publication-result').hidden = true;
+    $('#publication-meta').hidden = true;
+    $('#publication-state').textContent = 'Chưa xuất bản';
+    $('#publication-state').className = 'publication-state';
     $('#share-sync-now').hidden = false;
     const openAccountBtn = $('#share-open-account');
     if (openAccountBtn) openAccountBtn.hidden = true;
@@ -525,8 +542,26 @@
     $('#share-my-role').className = `role-badge ${myRole}`;
 
     const isOwner = myRole === 'owner';
+    const canPublish = myRole === 'owner' || myRole === 'editor';
     $('#share-invite-section').hidden = !isOwner;
     $('#share-delete-project').hidden = !isOwner;
+    $('#publication-controls').hidden = !canPublish;
+    $('#publication-revoke').hidden = !canPublish;
+
+    const publication = await api.cloudGetPublication(shareProject.path);
+    if (publication) {
+      $('#publication-result').hidden = false;
+      $('#publication-link').value = publication.url;
+      $('#publication-state').textContent = publication.expired ? 'Đã hết hạn' : 'Đang chia sẻ';
+      $('#publication-state').className = `publication-state ${publication.expired ? 'expired' : 'active'}`;
+      $('#publication-publish').textContent = 'Cập nhật PDF mới nhất';
+      const expiry = publication.expiresAt ? new Date(publication.expiresAt).toLocaleString('vi-VN') : 'không hết hạn';
+      $('#publication-meta').textContent = `${publication.filename} · ${Math.max(1, Math.round(publication.size / 1024))} KiB · source ${publication.sourceHead.slice(0, 8)} · hết hạn: ${expiry}`;
+      $('#publication-meta').hidden = false;
+    } else {
+      $('#publication-link').value = '';
+      $('#publication-publish').textContent = 'Xuất bản PDF mới nhất';
+    }
 
     // Members list
     let members = [];
@@ -699,10 +734,41 @@
   $('#share-copy-link').addEventListener('click', async () => {
     const val = $('#share-link-input').value;
     if (val) {
-      await navigator.clipboard.writeText(val);
-      feedback('#share-feedback', 'Đã sao chép mã mời vào bộ nhớ tạm.');
+      try {
+        await api.copyText(val);
+        feedback('#share-feedback', 'Đã sao chép mã mời vào bộ nhớ tạm.');
+      } catch (error) {
+        feedback('#share-feedback', error.message, true);
+      }
     }
   });
+
+  $('#publication-publish').addEventListener('click', () => shareAction(async () => {
+    const days = Number($('#publication-expiry').value);
+    feedback('#share-feedback', 'Đang đồng bộ source và tải PDF lên R2…');
+    const publication = await api.cloudPublishPdf(shareProject.path, days);
+    await loadShare();
+    $('#publication-link').value = publication.url;
+    feedback('#share-feedback', 'Đã xuất bản PDF. Link chỉ cho phép xem kết quả, không truy cập source.');
+  }));
+
+  $('#publication-copy').addEventListener('click', async () => {
+    const link = $('#publication-link').value;
+    if (!link) return;
+    try {
+      await api.copyText(link);
+      feedback('#share-feedback', 'Đã sao chép link xem PDF.');
+    } catch (error) {
+      feedback('#share-feedback', error.message, true);
+    }
+  });
+
+  $('#publication-revoke').addEventListener('click', () => shareAction(async () => {
+    const result = await api.cloudRevokePublication(shareProject.path);
+    if (result.canceled) return;
+    await loadShare();
+    feedback('#share-feedback', 'Đã thu hồi link PDF.');
+  }));
 
   $('#share-refresh').addEventListener('click', () => shareAction(async () => {
     await loadShare();

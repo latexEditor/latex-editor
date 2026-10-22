@@ -232,6 +232,32 @@
         <strong id="share-my-role" class="role-badge">Chủ sở hữu</strong>
       </div>
 
+      <section id="share-pdf-section" class="share-section publication-card">
+        <div class="publication-heading">
+          <div>
+            <h3>Chia sẻ PDF kết quả</h3>
+            <p class="feature-note">Giảng viên có thể xem PDF bằng link mà không cần đăng nhập hay tham gia project. Source và lịch sử vẫn riêng tư.</p>
+          </div>
+          <span id="publication-state" class="publication-state">Chưa xuất bản</span>
+        </div>
+        <div id="publication-controls" class="publication-controls">
+          <label for="publication-expiry">Thời hạn link</label>
+          <select id="publication-expiry">
+            <option value="7">7 ngày</option>
+            <option value="30" selected>30 ngày</option>
+            <option value="90">90 ngày</option>
+            <option value="0">Không hết hạn</option>
+          </select>
+          <button id="publication-publish" type="button" class="primary">Xuất bản PDF mới nhất</button>
+        </div>
+        <div id="publication-result" class="publication-result" hidden>
+          <input id="publication-link" readonly aria-label="Link xem PDF">
+          <button id="publication-copy" type="button">Sao chép link</button>
+          <button id="publication-revoke" type="button" class="btn-danger">Thu hồi</button>
+        </div>
+        <p id="publication-meta" class="feature-note" hidden></p>
+      </section>
+
       <section id="share-invite-section" class="share-section">
         <h3>Mời thành viên mới</h3>
         <div class="invite-panels">

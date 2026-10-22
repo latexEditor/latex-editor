@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld('latexEditor', {
   hideEditor: () => ipcRenderer.invoke('latex:hide-editor'),
   showEditor: () => ipcRenderer.invoke('latex:show-editor'),
   togglePresencePopover: (anchor) => ipcRenderer.invoke('latex:toggle-presence-popover', anchor),
+  copyText: (value) => ipcRenderer.invoke('latex:clipboard-write', value),
   onPresencePopoverClosed: (callback) => {
     const listener = () => callback();
     ipcRenderer.on('latex:presence-popover-closed', listener);
@@ -46,6 +47,9 @@ contextBridge.exposeInMainWorld('latexEditor', {
   cloudDeclineInvitation: (invitationId) => ipcRenderer.invoke('latex:cloud-decline-invitation', invitationId),
   cloudDeleteProject: (project) => ipcRenderer.invoke('latex:cloud-delete-project', project),
   cloudDeleteById: (id, name) => ipcRenderer.invoke('latex:cloud-delete-by-id', id, name),
+  cloudGetPublication: (project) => ipcRenderer.invoke('latex:cloud-publication-get', project),
+  cloudPublishPdf: (project, expiresInDays) => ipcRenderer.invoke('latex:cloud-publication-publish', project, expiresInDays),
+  cloudRevokePublication: (project) => ipcRenderer.invoke('latex:cloud-publication-revoke', project),
   templateCloudList: () => ipcRenderer.invoke('latex:template-cloud-list'),
   templateCloudUpload: (templateId) => ipcRenderer.invoke('latex:template-cloud-upload', templateId),
   templateCloudDownload: (templateId) => ipcRenderer.invoke('latex:template-cloud-download', templateId),
