@@ -58,6 +58,7 @@ export class MemoryD1 {
       project_members: [],
       invitations: [],
       user_templates: [],
+      project_publications: [],
       account_deletions: [], cloud_storage: [], cloud_maintenance: []
     };
   }
@@ -154,7 +155,7 @@ class MemoryD1Statement {
       }
     }
     // Check PK uniqueness
-    const pkMap = { users: ['id'], sessions: ['token_hash'], projects: ['id'], invitations: ['id'], project_members: ['project_id', 'user_id'], user_templates: ['user_id', 'id'] };
+    const pkMap = { users: ['id'], sessions: ['token_hash'], projects: ['id'], invitations: ['id'], project_members: ['project_id', 'user_id'], user_templates: ['user_id', 'id'], project_publications: ['project_id'] };
     const pk = pkMap[table] || [];
     if (pk.length && rows.some((r) => pk.every((c) => r[c] === row[c]))) {
       throw new Error(`UNIQUE constraint failed: ${table}`);
@@ -359,6 +360,15 @@ class MemoryD1Statement {
         if (m) {
           const col = m[1].includes('.') ? m[1].split('.')[1] : m[1];
           if (!(row[col] <= p[pi++])) return false;
+          continue;
+        }
+        // col IN (?, ?, ...)
+        m = cond.match(/^(\w+(?:\.\w+)?)\s+IN\s*\((\s*\?(?:\s*,\s*\?)*\s*)\)$/i);
+        if (m) {
+          const col = m[1].includes('.') ? m[1].split('.')[1] : m[1];
+          const count = (m[2].match(/\?/g) || []).length;
+          if (!p.slice(pi, pi + count).includes(row[col])) return false;
+          pi += count;
           continue;
         }
       }

@@ -9,43 +9,48 @@
 </head>
 <body>
   <header class="topbar">
-    <div class="brand" title="LaTeX Editor">
-      <span class="brand-mark">L</span>
-      <strong>LaTeX Editor</strong>
+    <div class="topbar-left">
+      <div class="brand" title="LaTeX Editor">
+        <span class="brand-mark">L</span>
+        <strong>LaTeX Editor</strong>
+      </div>
+
+      <div class="divider"></div>
+
+      <button id="open-project" class="toolbar-button" title="Open folder (LaTeX project)">Open Folder</button>
+      <button id="new-project" class="toolbar-button" title="Create new project">New Project</button>
+      <button id="recent-projects" class="toolbar-button" title="Open recent project">Recent</button>
+      <button id="history-button" class="toolbar-button feature-button" title="Version history" aria-label="Version history" disabled><span class="feature-label">History</span></button>
+      <button id="share-button" class="toolbar-button feature-button" title="Share &amp; Collaboration" aria-label="Share &amp; Collaboration" disabled><span class="feature-label">Share</span></button>
     </div>
 
-    <div class="divider"></div>
-
-    <div id="project-tabs" class="project-tabs" aria-label="Open projects"></div>
-
-    <button id="open-project" class="toolbar-button" title="Open folder (LaTeX project)">Open Folder</button>
-    <button id="new-project" class="toolbar-button" title="Create new project">New Project</button>
-    <button id="recent-projects" class="toolbar-button" title="Open recent project">Recent</button>
-    <button id="history-button" class="toolbar-button feature-button" title="Version history" aria-label="Version history" disabled><span class="feature-label">History</span></button>
-    <button id="share-button" class="toolbar-button feature-button" title="Share &amp; Collaboration" aria-label="Share &amp; Collaboration" disabled><span class="feature-label">Share</span></button>
-
-    <div class="spacer"></div>
-    <div id="presence-wrap" class="presence-wrap" hidden>
-      <button id="presence-status" class="toolbar-button presence-status" title="Active collaborators" aria-haspopup="true" aria-expanded="false"><span class="presence-pulse"></span><span id="presence-label">0 online</span></button>
+    <div class="topbar-center">
+      <div id="project-tabs" class="project-tabs" aria-label="Open projects"></div>
     </div>
-    <button id="account-button" class="toolbar-button feature-button account-button" title="Login to sync projects" aria-label="Account &amp; Cloud sync">
-      <span id="account-avatar" class="account-avatar">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="account-avatar-icon">
-          <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path>
-          <circle cx="12" cy="7" r="4"></circle>
-        </svg>
-      </span>
-      <span id="account-label" class="feature-label">Login</span>
-      <span id="account-badge" class="account-badge" hidden>0</span>
-    </button>
 
-    <button id="runtime-details" class="runtime-button" title="View LaTeX runtime status">
-      <span id="runtime-dot" class="dot checking"></span>
-      <span id="runtime-label">Checking LaTeX…</span>
-    </button>
-    <div class="status" title="Editor status">
-      <span id="status-dot" class="dot checking"></span>
-      <span id="status-text">Connecting…</span>
+    <div class="topbar-right">
+      <div id="presence-wrap" class="presence-wrap" hidden>
+        <button id="presence-status" class="toolbar-button presence-status" title="Active collaborators" aria-haspopup="true" aria-expanded="false"><span class="presence-pulse"></span><span id="presence-label">0 online</span></button>
+      </div>
+      <button id="account-button" class="toolbar-button feature-button account-button" title="Login to sync projects" aria-label="Account &amp; Cloud sync">
+        <span id="account-avatar" class="account-avatar">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="account-avatar-icon">
+            <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path>
+            <circle cx="12" cy="7" r="4"></circle>
+          </svg>
+        </span>
+        <span id="account-label" class="feature-label">Login</span>
+        <span id="account-badge" class="account-badge" hidden>0</span>
+      </button>
+
+      <button id="runtime-details" class="runtime-button" title="View LaTeX runtime status">
+        <span id="runtime-dot" class="dot checking"></span>
+        <span id="runtime-label">Checking LaTeX…</span>
+      </button>
+      <div class="status" title="Editor status">
+        <span id="status-dot" class="dot checking"></span>
+        <span id="status-text">Connecting…</span>
+      </div>
     </div>
   </header>
 
@@ -226,6 +231,32 @@
         <span>Vai trò của bạn:</span>
         <strong id="share-my-role" class="role-badge">Chủ sở hữu</strong>
       </div>
+
+      <section id="share-pdf-section" class="share-section publication-card">
+        <div class="publication-heading">
+          <div>
+            <h3>Chia sẻ PDF kết quả</h3>
+            <p class="feature-note">Giảng viên có thể xem PDF bằng link mà không cần đăng nhập hay tham gia project. Source và lịch sử vẫn riêng tư.</p>
+          </div>
+          <span id="publication-state" class="publication-state">Chưa xuất bản</span>
+        </div>
+        <div id="publication-controls" class="publication-controls">
+          <label for="publication-expiry">Thời hạn link</label>
+          <select id="publication-expiry">
+            <option value="7">7 ngày</option>
+            <option value="30" selected>30 ngày</option>
+            <option value="90">90 ngày</option>
+            <option value="0">Không hết hạn</option>
+          </select>
+          <button id="publication-publish" type="button" class="primary">Xuất bản PDF mới nhất</button>
+        </div>
+        <div id="publication-result" class="publication-result" hidden>
+          <input id="publication-link" readonly aria-label="Link xem PDF">
+          <button id="publication-copy" type="button">Sao chép link</button>
+          <button id="publication-revoke" type="button" class="btn-danger">Thu hồi</button>
+        </div>
+        <p id="publication-meta" class="feature-note" hidden></p>
+      </section>
 
       <section id="share-invite-section" class="share-section">
         <h3>Mời thành viên mới</h3>

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, WebContentsView, dialog, ipcMain, shell, session, safeStorage } = require('electron');
+const { app, BrowserWindow, WebContentsView, dialog, ipcMain, shell, session, safeStorage, clipboard } = require('electron');
 const path = require('node:path');
 const config = require('./config');
 const { acquireInstanceLock } = require('./InstanceProfile');
@@ -967,7 +967,7 @@ async function startup() {
   });
   registerFeatureIpc({
     ipcMain, dialog, workspace: workspaceManager, history, auth: authManager, cloud,
-    collaboration: collaborationManager, openProject: loadProject
+    collaboration: collaborationManager, openProject: loadProject, clipboard
   });
   const restoredProjects = workspaceManager.listOpenProjects();
   const mostRecentOpenProject = workspaceManager.listRecent().find((recentProject) => (

@@ -1,6 +1,6 @@
 # Lộ trình phát triển hệ thống LaTeX Editor
 
-Cập nhật: 2026-10-17. `[x]` nghĩa là đã triển khai và kiểm thử ở mức ghi rõ
+Cập nhật: 2026-10-22. `[x]` nghĩa là đã triển khai và kiểm thử ở mức ghi rõ
 trong từng mục; không thay thế nghiệm thu production với người dùng thật.
 
 ## Đợt 1 — Thư viện mẫu (Hoàn thành)
@@ -37,7 +37,7 @@ trong từng mục; không thay thế nghiệm thu production với người dù
 
 ## Đợt 4 — Hoàn thiện Desktop và Đóng gói phát hành (Ưu tiên hiện tại)
 
-- [x] **Deploy Worker**: Đã áp `0001_operations.sql` và deploy ngày 2026-10-17 (`Version ID: 564a4d07-9994-4856-a791-497eaf409c1d`); `/health` HTTP 200, `configured: true`, `collaborationConfigured: true`, không còn migration chờ áp dụng.
+- [x] **Deploy Worker**: Đã áp `0001_operations.sql`, `0002_pdf_publications.sql` và deploy gần nhất ngày 2026-10-22 (`Version ID: e8a6ce86-3565-4a59-9558-7eb9cc055f1b`); `/health` HTTP 200, `configured: true`, `collaborationConfigured: true`, bảng publication tồn tại và không còn migration chờ áp dụng.
 - [x] **Hai profile trên một máy**: Tách Electron `userData` trước single-instance lock khi dùng `LATEX_EDITOR_DATA_DIR`; hai phiên chạy đồng thời, cùng profile vẫn bị chặn mở trùng. Đã kiểm thử bằng tiến trình Electron thật; hướng dẫn CMD/Git Bash trong [Development](development.md).
 - [ ] **Kiểm thử nghiệm thu 2 tài khoản thật**: Thử nghiệm trên môi trường production với hai tài khoản Google thật:
   - Mời theo địa chỉ email và chấp nhận trong app hoặc qua link bí mật (gửi email thật chưa bật).
@@ -55,6 +55,7 @@ trong từng mục; không thay thế nghiệm thu production với người dù
 
 ## Đợt 5 — Cloud, Vận hành và Thư viện mẫu
 
+- [x] Xuất bản PDF kết quả riêng trên R2: link công khai khó đoán chỉ đọc, không lộ source/lịch sử; cập nhật giữ nguyên URL, gắn Git commit nguồn, thời hạn 7/30/90 ngày hoặc không hết hạn, thu hồi và dọn object hết hạn bằng cron. Desktop tự tìm PDF build mới nhất và quản lý link trong hộp Chia sẻ. Migration và Worker đã được triển khai production ngày 2026-10-22.
 - [x] Quota dung lượng theo tài khoản/project, reservation nguyên tử D1, API và UI xem dung lượng; migration và Worker đã triển khai production ngày 2026-10-17, còn nghiệm thu luồng có xác thực.
 - [x] Cron GC có cursor, thời gian chờ 24 giờ, kiểm tra tham chiếu D1 và thu hồi reservation mồ côi.
 - [x] Chức năng xóa project cloud (Durable Object cleanup, R2 bundle purge, D1 cascade delete, confirmation dialog trên Desktop).
@@ -75,8 +76,9 @@ trong từng mục; không thay thế nghiệm thu production với người dù
 - [ ] Onboard domain Email Sending thật cho Cloudflare Worker khi chuyển sang plan phù hợp.
 
 Chi tiết migration, quota, giới hạn GC và trạng thái backup: [Cloud Operations](../../latex-editor-cloud/OPERATIONS.md).
-Migration vận hành và deploy Worker đã hoàn tất. Lần kiểm tra gần nhất: 98 test
-desktop, 48 test cloud, test giao diện Electron và test nhiều profile đều pass.
+Migration vận hành và deploy Worker đã hoàn tất. Lần kiểm tra gần nhất: 103 test
+desktop, 32 test Worker, 19 test operations/backup, kiểm tra mã nguồn và Wrangler
+dry-run đều pass; các test giao diện Electron và nhiều profile trước đó cũng đã pass.
 API production có xác thực, cron thực tế và các luồng xóa/khôi phục vẫn cần nghiệm thu;
 không chạy thử xóa dữ liệu người dùng chỉ để đánh dấu hoàn thành.
 

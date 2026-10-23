@@ -1,5 +1,13 @@
 # LaTeX Editor Cloud
 
+Ngoài Git bundle riêng tư của project, Worker hỗ trợ xuất bản PDF kết quả thành
+object R2 riêng qua `/v1/projects/:id/publication`. Link ngẫu nhiên `/p/:id` chỉ
+trả PDF, không yêu cầu đăng nhập và không cấp quyền xem source/lịch sử. Owner và
+editor có thể cập nhật cùng một link, đặt hạn tối đa 365 ngày hoặc thu hồi ngay.
+
+Khi nâng cấp môi trường đã tồn tại, áp dụng
+`migrations/0002_pdf_publications.sql` trước khi deploy Worker mới.
+
 Backend Cloudflare Worker cho đăng nhập Google và lưu project + lịch sử Git trên R2. Đây không phải Git hosting server: mỗi lần đồng bộ gửi một Git bundle đầy đủ, không có giao thức Git push/pull hay merge phía server.
 
 Worker production đã được deploy với Google OAuth, D1 và R2. Test tự động vẫn dùng Google/D1/R2/email giả lập để không thay đổi dữ liệu production; luồng chia sẻ cần được nghiệm thu thêm bằng hai tài khoản Google thật.
@@ -96,7 +104,8 @@ Không dùng `workers.dev` làm domain người gửi. Nếu binding hoặc `EMA
   - `auth/login/`, `auth/code/`: Trạng thái OAuth tạm và mã trao đổi một lần (TTL lần lượt 3 phút và 1 phút, tiêu thụ bằng conditional write).
   - `bundles/:projectId/:uuid.bundle`: Toàn bộ Git history được đóng gói thành Git bundle v2.
   - `templates/:userId/:templateId.zip`: Lưu trữ file ZIP đóng gói template cá nhân của người dùng.
-  - Lifecycle: Chỉ cấu hình lifecycle xóa tự động đối với prefix `auth/` sau 8 ngày. Không áp lifecycle tự động cho prefix `bundles/` để tránh mất dữ liệu snapshot mà D1 đang tham chiếu.
+  - `publications/:projectId/:uuid.pdf`: PDF kết quả tách khỏi Git bundle; Worker chỉ phục vụ qua link `/p/:publicationId` khó đoán.
+  - Lifecycle: Chỉ cấu hình lifecycle xóa tự động đối với prefix `auth/` sau 8 ngày. Không áp lifecycle tự động cho `bundles/` hoặc `publications/`; cron đối chiếu tham chiếu D1 và thời hạn link trước khi xóa.
 - **Durable Objects (`ProjectCollaborationRoom`)**:
   - Mỗi project được điều phối bởi một Durable Object riêng biệt.
   - Lưu trữ SQLite nội bộ: Draft tài liệu Yjs (`document:<path>`), file manifest có tombstone (`manifest:v1`), và hàng đợi thao tác đã khử trùng lặp qua operation ID.
@@ -124,6 +133,10 @@ Không dùng `workers.dev` làm domain người gửi. Nếu binding hoặc `EMA
 | `DELETE /v1/projects/:id` | DELETE | Xóa project khỏi Cloud (xóa DO room, purge R2 bundles, D1 cascade delete) | Owner |
 | `GET /v1/projects/:id` | GET | Tải Git bundle đầy đủ của project | Thành viên |
 | `GET /v1/projects/:id/meta` | GET | Lấy manifest, head commit, updated_at, role và ETag | Thành viên |
+| `GET /v1/projects/:id/publication` | GET | Xem metadata và link PDF kết quả hiện tại | Thành viên |
+| `PUT /v1/projects/:id/publication` | PUT | Xuất bản/cập nhật PDF gắn với Git head hiện tại | Owner / Editor |
+| `DELETE /v1/projects/:id/publication` | DELETE | Thu hồi link và dọn PDF đã xuất bản | Owner / Editor |
+| `GET /p/:publicationId` | GET/HEAD | Xem trực tiếp PDF bằng link khó đoán, không lộ source | Công khai theo link |
 | `GET /v1/projects/:id/members` | GET | Danh sách thành viên và vai trò | Thành viên |
 | `DELETE /v1/projects/:id/members/:userId` | DELETE | Xóa thành viên khỏi project (hoặc tự rời project) | Owner (hoặc chính user) |
 | `POST /v1/projects/:id/invite` | POST | Tạo lời mời qua email hoặc tạo link bí mật (`id:token`) | Owner |

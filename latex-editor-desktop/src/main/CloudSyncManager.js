@@ -36,6 +36,40 @@ class CloudSyncManager {
     await fs.rename(file + '.tmp', file);
   }
 
+  async findBuiltPdf(project) {
+    const candidates = [];
+    const visit = async (directory, depth) => {
+      let entries;
+      try { entries = await fs.readdir(directory, { withFileTypes: true }); }
+      catch (error) { if (error.code === 'ENOENT') return; throw error; }
+      for (const entry of entries) {
+        if (entry.isSymbolicLink()) continue;
+        const file = path.join(directory, entry.name);
+        if (entry.isDirectory() && depth > 0) await visit(file, depth - 1);
+        else if (entry.isFile() && /\.pdf$/i.test(entry.name)) {
+          const stat = await fs.stat(file);
+          if (stat.size > 0 && stat.size <= MAX_BYTES) candidates.push({ file, stat });
+        }
+        if (candidates.length > 500) throw new Error('Có quá nhiều file PDF trong thư mục build.');
+      }
+    };
+    await visit(path.join(project, 'build'), 3);
+    let rootEntries = [];
+    try { rootEntries = await fs.readdir(project, { withFileTypes: true }); } catch {}
+    for (const entry of rootEntries) {
+      if (!entry.isFile() || !/\.pdf$/i.test(entry.name)) continue;
+      const file = path.join(project, entry.name);
+      const stat = await fs.stat(file);
+      if (stat.size > 0 && stat.size <= MAX_BYTES) candidates.push({ file, stat });
+    }
+    candidates.sort((left, right) => right.stat.mtimeMs - left.stat.mtimeMs);
+    const selected = candidates[0];
+    if (!selected) throw new Error('Chưa tìm thấy PDF đã build. Hãy build project thành công trước khi xuất bản.');
+    const data = await fs.readFile(selected.file);
+    if (data.subarray(0, 5).toString('ascii') !== '%PDF-') throw new Error('File kết quả không phải PDF hợp lệ.');
+    return { path: selected.file, filename: path.basename(selected.file), data };
+  }
+
   async list() {
     return this.exclusive(async (_user, check) => {
       const projects = [];
@@ -111,6 +145,76 @@ class CloudSyncManager {
       await this.writeMetadata(folder, { id, owner: user.id, apiUrl: this.auth.apiUrl, etag: response.headers.get('ETag') });
       this.workspace.remember(folder);
       return this.workspace.describe(folder);
+    });
+  }
+
+  refreshHistory(project) {
+    return this.exclusive(async (user, check) => {
+      const metadata = await this.readMetadata(project);
+      if (!metadata) return { updated: false, localOnly: true };
+      if (metadata.owner !== user.id || metadata.apiUrl !== this.auth.apiUrl) {
+        throw new Error('Project này thuộc tài khoản hoặc dịch vụ cloud khác.');
+      }
+      const response = await this.auth.request(`/v1/projects/${metadata.id}`);
+      if (Number(response.headers.get('Content-Length')) > MAX_BYTES) throw new Error('Bundle vượt giới hạn 50 MB.');
+      const chunks = [];
+      let total = 0;
+      for await (const chunk of response.body) {
+        total += chunk.length;
+        if (total > MAX_BYTES) throw new Error('Bundle vượt giới hạn 50 MB.');
+        chunks.push(Buffer.from(chunk));
+      }
+      check();
+      const result = await this.history.refreshBundle(project, Buffer.concat(chunks), response.headers.get('X-Git-Head'));
+      check();
+      await this.writeMetadata(project, { ...metadata, etag: response.headers.get('ETag') });
+      return result;
+    });
+  }
+
+  async getPublication(project) {
+    return this.exclusive(async (_user, check) => {
+      const metadata = await this.readMetadata(project);
+      if (!metadata) return null;
+      if (metadata.apiUrl !== this.auth.apiUrl) throw new Error('Project này thuộc tài khoản hoặc dịch vụ cloud khác.');
+      const response = await this.auth.request(`/v1/projects/${metadata.id}/publication`);
+      check();
+      return (await response.json()).publication || null;
+    });
+  }
+
+  async publishPdf(project, expiresInDays = 30) {
+    const days = Number(expiresInDays);
+    if (!Number.isInteger(days) || days < 0 || days > 365) throw new Error('Thời hạn link PDF không hợp lệ.');
+    const pdf = await this.findBuiltPdf(project);
+    const synced = await this.upload(project);
+    const sourceHead = synced.project?.head;
+    if (!/^[a-f0-9]{40}$/.test(sourceHead || '')) throw new Error('Không xác định được phiên bản source đã đồng bộ.');
+    return this.exclusive(async (_user, check) => {
+      const metadata = await this.readMetadata(project);
+      if (!metadata || metadata.apiUrl !== this.auth.apiUrl) throw new Error('Project này chưa được đồng bộ lên cloud.');
+      const response = await this.auth.request(`/v1/projects/${metadata.id}/publication`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/pdf',
+          'X-Source-Head': sourceHead,
+          'X-PDF-Filename': encodeURIComponent(pdf.filename),
+          'X-Expires-In-Days': String(days)
+        },
+        body: pdf.data
+      });
+      check();
+      return { ...(await response.json()).publication, localPath: pdf.path };
+    });
+  }
+
+  revokePublication(project) {
+    return this.exclusive(async (_user, check) => {
+      const metadata = await this.readMetadata(project);
+      if (!metadata || metadata.apiUrl !== this.auth.apiUrl) throw new Error('Project này chưa được đồng bộ lên cloud.');
+      const response = await this.auth.request(`/v1/projects/${metadata.id}/publication`, { method: 'DELETE' });
+      check();
+      return response.json();
     });
   }
 

@@ -37,6 +37,64 @@ test('projects are isolated per account via D1 membership', async () => {
   assert.equal(download.headers.get('X-Git-Head'), head);
 });
 
+test('members can publish an unlisted PDF link, update it in place, and revoke it', async () => {
+  const env = environment();
+  const owner = (await signedIn(handleRequest, env, 'pdf-owner')).session;
+  await request(env, owner.token, `/v1/projects/${id}`, upload());
+  const publish = (body, days = 30) => request(env, owner.token, `/v1/projects/${id}/publication`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/pdf',
+      'X-Source-Head': head,
+      'X-PDF-Filename': encodeURIComponent('Báo cáo kết quả.pdf'),
+      'X-Expires-In-Days': String(days)
+    },
+    body
+  });
+
+  const firstResponse = await publish('%PDF-1.7\nfirst\n%%EOF');
+  assert.equal(firstResponse.status, 200);
+  const first = (await firstResponse.json()).publication;
+  assert.match(first.url, new RegExp(`/p/${first.id}$`));
+  assert.equal(first.sourceHead, head);
+  const publicFirst = await handleRequest(new Request(first.url), env);
+  assert.equal(publicFirst.status, 200);
+  assert.equal(publicFirst.headers.get('Content-Type'), 'application/pdf');
+  assert.match(await publicFirst.text(), /first/);
+  assert.equal(publicFirst.headers.get('Cache-Control'), 'private, no-store');
+
+  const second = (await (await publish('%PDF-1.7\nsecond\n%%EOF', 0)).json()).publication;
+  assert.equal(second.id, first.id, 'updating the result keeps the shared URL stable');
+  assert.equal(second.expiresAt, null);
+  assert.match(await (await handleRequest(new Request(second.url), env)).text(), /second/);
+  assert.equal(env.DB.tables.project_publications.length, 1);
+  assert.equal(env.DB.tables.cloud_storage.filter((row) => row.key.startsWith('publications/')).length, 1);
+
+  const meta = await (await request(env, owner.token, `/v1/projects/${id}/publication`)).json();
+  assert.equal(meta.publication.url, first.url);
+  assert.equal((await request(env, owner.token, `/v1/projects/${id}/publication`, { method: 'DELETE' })).status, 200);
+  assert.equal((await handleRequest(new Request(first.url), env)).status, 404);
+});
+
+test('PDF publication validates permissions, source revision, type, and expiration', async () => {
+  const env = environment();
+  const owner = (await signedIn(handleRequest, env, 'pdf-permissions-owner')).session;
+  const viewer = (await signedIn(handleRequest, env, 'pdf-viewer')).session;
+  await request(env, owner.token, `/v1/projects/${id}`, upload());
+  env.DB.tables.project_members.push({ project_id: id, user_id: viewer.user.id, role: 'viewer', joined_at: new Date().toISOString() });
+  const options = {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/pdf', 'X-Source-Head': head, 'X-PDF-Filename': 'result.pdf', 'X-Expires-In-Days': '7' },
+    body: '%PDF-1.7\ncontent\n%%EOF'
+  };
+  assert.equal((await request(env, viewer.token, `/v1/projects/${id}/publication`, options)).status, 403);
+  assert.equal((await request(env, owner.token, `/v1/projects/${id}/publication`, { ...options, headers: { ...options.headers, 'X-Source-Head': 'b'.repeat(40) } })).status, 409);
+  assert.equal((await request(env, owner.token, `/v1/projects/${id}/publication`, { ...options, body: 'not-pdf' })).status, 400);
+  const publication = (await (await request(env, owner.token, `/v1/projects/${id}/publication`, options)).json()).publication;
+  env.DB.tables.project_publications[0].expires_at = Date.now() - 1;
+  assert.equal((await handleRequest(new Request(publication.url), env)).status, 410);
+});
+
 test('OAuth requests work with legacy workerd redirect modes and never follow provider redirects', async () => {
   for (const redirectAt of [null, '/token', '/userinfo']) {
     const calls = [];

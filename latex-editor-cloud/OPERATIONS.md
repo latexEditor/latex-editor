@@ -2,11 +2,13 @@
 
 ## Trạng thái triển khai
 
-Đã áp migration `0001_operations.sql` và deploy Worker production ngày 2026-10-17
-(version `564a4d07-9994-4856-a791-497eaf409c1d`). Kiểm tra `/health` trả HTTP 200,
-`configured: true`, `collaborationConfigured: true`; không còn migration chờ áp dụng.
-48 test cloud và dry-run đều pass trước deploy. Chưa nghiệm thu API có xác thực
-trong lượt deploy này vì công cụ chẩn đoán không có phiên đăng nhập local.
+Đã áp migrations `0001_operations.sql`, `0002_pdf_publications.sql` và deploy Worker
+production gần nhất ngày 2026-10-22 (version `e8a6ce86-3565-4a59-9558-7eb9cc055f1b`).
+Kiểm tra `/health` trả HTTP 200 với `configured: true`, `collaborationConfigured: true`;
+bảng `project_publications` tồn tại trên D1, link publication không tồn tại trả HTTP 404
+và không còn migration chờ áp dụng. Trước deploy, 103 test desktop, 32 test Worker,
+19 test operations/backup, kiểm tra mã nguồn và Wrangler dry-run đều pass. Luồng tạo
+publication có xác thực vẫn cần nghiệm thu bằng project thật từ ứng dụng desktop.
 Backup dùng bucket private `latex-editor-backups` trong cùng tài khoản Cloudflare;
 lịch GitHub Actions cần bật riêng như bên dưới. Email Sending chưa được cấu hình.
 
@@ -33,8 +35,8 @@ lịch GitHub Actions cần bật riêng như bên dưới. Email Sending chưa 
 - R2 được duyệt 24 object/lần, kiểm tra tham chiếu và xóa theo batch, lưu cursor trong D1 để tiếp tục ở lần sau.
   Với dữ liệu lớn, một vòng quét có thể kéo dài; không bảo đảm mọi object sẽ
   bị xóa ngay sau 24 giờ. Theo dõi tốc độ tăng dữ liệu để điều chỉnh batching.
-- Chỉ xét prefix `auth/`, `bundles/`, `templates/`; bỏ qua object dưới 24 giờ
-  và object vẫn được project/template tham chiếu trong D1.
+- Chỉ xét prefix `auth/`, `bundles/`, `templates/`, `publications/`; bỏ qua object dưới 24 giờ
+  và object vẫn được project/template/publication tham chiếu trong D1. Publication hết hạn được thu hồi theo batch trước vòng GC.
 - Template mới dùng key bất biến theo UUID để tránh GC xóa trúng bản mới.
 - Reservation không có object trên R2 cũng được thu hồi sau thời gian chờ.
 - Xóa tài khoản cần xác nhận bằng hộp thoại desktop và body
@@ -116,7 +118,7 @@ hoặc dashboard chi phí riêng.
   backup trong API công khai hoặc desktop. Không có credential trong Git.
 - Tạo backup bằng `npm --prefix latex-editor-cloud run backup -- create`.
   Script dùng Node 22.12.0 và Wrangler 4.120.0 cô lập, không thay Node desktop.
-- Script export D1, lấy key từ đúng bản export đó và sao chép bundle/template
+- Script export D1, lấy key từ đúng bản export đó và sao chép bundle/template/PDF publication
   được tham chiếu. Mỗi file có kích thước và SHA-256; `manifest.json` được ghi
   cuối cùng. Nếu thiếu object hoặc upload lỗi, không công bố backup hoàn tất.
 - Nếu D1 tham chiếu object đã bị thiếu ở source, vẫn giữ SQL và các object đọc
@@ -130,8 +132,8 @@ hoặc dashboard chi phí riêng.
   làm backup thất bại; retry cả lượt. Chỉ tin backup có manifest và qua verify.
 - Giới hạn hiện tại: metadata D1 export 64 MiB, mỗi object 50 MiB, 100.000 key,
   cửa sổ sao chép an toàn dưới 2 giờ. File lớn hơn bị từ chối rõ ràng.
-- Backup chứa metadata D1 (có email và session đã băm), các snapshot Git và
-  template được tham chiếu. Không bao gồm OAuth state tạm, object mồ côi hay
+- Backup chứa metadata D1 (có email và session đã băm), các snapshot Git,
+  template và PDF publication được tham chiếu. Không bao gồm OAuth state tạm, object mồ côi hay
   draft Yjs chưa nằm trong snapshot. Chưa hỗ trợ backup Durable Objects.
 - File tạm nằm trong thư mục riêng, được dọn trong `finally`; không đưa dữ liệu
   backup lên Git hoặc artifact của GitHub Actions, không in nội dung SQL/token.

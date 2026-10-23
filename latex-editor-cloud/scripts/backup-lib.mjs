@@ -12,7 +12,7 @@ const SQL_LIMIT = 64 * 1024 * 1024;
 const OBJECT_LIMIT = 50 * 1024 * 1024;
 
 export function validObjectKey(key) {
-  return typeof key === 'string' && /^(bundles|templates)\/[A-Za-z0-9_./-]+$/.test(key)
+  return typeof key === 'string' && /^(bundles|templates|publications)\/[A-Za-z0-9_./-]+$/.test(key)
     && !key.split('/').some((part) => !part || part === '.' || part === '..');
 }
 
@@ -28,7 +28,10 @@ export async function snapshotKeys(file) {
   try {
     db.exec('PRAGMA foreign_keys=OFF;');
     db.exec(await readFile(file, 'utf8'));
-    const keys = db.prepare('SELECT bundle_key FROM projects UNION SELECT bundle_key FROM user_templates').all().map((row) => row.bundle_key);
+    const hasPublications = Boolean(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'project_publications'").get());
+    const query = 'SELECT bundle_key AS object_key FROM projects UNION SELECT bundle_key AS object_key FROM user_templates'
+      + (hasPublications ? ' UNION SELECT pdf_key AS object_key FROM project_publications' : '');
+    const keys = db.prepare(query).all().map((row) => row.object_key);
     if (keys.length > 100000 || keys.some((key) => !validObjectKey(key))) throw new Error('Invalid object references in D1 export.');
     return keys;
   } finally { db.close(); }

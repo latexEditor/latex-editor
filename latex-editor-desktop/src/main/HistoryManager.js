@@ -227,6 +227,43 @@ class HistoryManager {
       } finally { await fs.rm(file, { force: true }); }
     });
   }
+
+  refreshBundle(project, data, expectedHead) {
+    return this.locked(project, async (repo) => {
+      if (!Buffer.isBuffer(data) || data.length > MAX_BYTES || !/^[a-f0-9]{40}$/.test(expectedHead || '')) {
+        throw new Error('Dữ liệu lịch sử cloud không hợp lệ.');
+      }
+      await this.initialize(repo);
+      const localHead = await this.head(repo);
+      const file = path.join(repo, '.git', `refresh-${crypto.randomUUID()}.bundle`);
+      const incomingRef = `refs/latex-editor/incoming-${crypto.randomUUID()}`;
+      try {
+        await fs.writeFile(file, data, { flag: 'wx' });
+        await this.git(repo, ['bundle', 'verify', file]);
+        const refs = await this.git(repo, ['bundle', 'list-heads', file, 'refs/heads/main']);
+        if (refs.trim() !== `${expectedHead} refs/heads/main`) throw new Error('Mã phiên bản cloud không khớp bundle.');
+        await this.git(repo, ['-c', 'protocol.file.allow=always', '-c', 'fetch.fsckObjects=true', 'fetch', '--no-tags', file, `refs/heads/main:${incomingRef}`]);
+        const incomingHead = (await this.git(repo, ['rev-parse', incomingRef])).trim();
+        if (incomingHead !== expectedHead) throw new Error('Không xác minh được phiên bản lịch sử cloud.');
+        if (localHead === incomingHead) return { updated: false, head: localHead };
+        if (!localHead) {
+          await this.git(repo, ['update-ref', 'refs/heads/main', incomingHead]);
+          return { updated: true, head: incomingHead };
+        }
+        let mergeBase = null;
+        try { mergeBase = (await this.git(repo, ['merge-base', localHead, incomingHead])).trim(); } catch {}
+        if (mergeBase === localHead) {
+          await this.git(repo, ['update-ref', 'refs/heads/main', incomingHead, localHead]);
+          return { updated: true, head: incomingHead };
+        }
+        if (mergeBase === incomingHead) return { updated: false, localAhead: true, head: localHead };
+        throw new Error('Lịch sử local và cloud đã phân nhánh. Hãy tải bản cloud thành project riêng để đối chiếu.');
+      } finally {
+        try { await this.git(repo, ['update-ref', '-d', incomingRef]); } catch {}
+        await fs.rm(file, { force: true });
+      }
+    });
+  }
 }
 
 module.exports = { HistoryManager, safeFile, MAX_BYTES };
